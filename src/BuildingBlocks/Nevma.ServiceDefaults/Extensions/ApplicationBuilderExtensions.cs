@@ -14,8 +14,7 @@ public static class ApplicationBuilderExtensions
         if (!app.Environment.IsDevelopment())
             app.UseHsts();
 
-        if (!app.Environment.IsDevelopment() ||
-            app.Configuration.GetValue("HttpsRedirection:Enabled", true))
+        if (!app.Environment.IsDevelopment())
         {
             app.UseHttpsRedirection();
         }
