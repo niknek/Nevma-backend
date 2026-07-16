@@ -12,6 +12,24 @@ public static class AccountEndpoints
 {
     public static IEndpointRouteBuilder MapAccountEndpoints(this IEndpointRouteBuilder endpoints)
     {
+        endpoints.MapPost("/api/auth/login", async (
+            LoginRequest request,
+            SignInManager<IdentityAccount> signInManager,
+            SecurityEventService securityEvents,
+            HttpContext context) =>
+        {
+            var account = await signInManager.UserManager.FindByEmailAsync(request.Email.Trim());
+            var result = await signInManager.PasswordSignInAsync(
+                request.Email.Trim(), request.Password, isPersistent: false, lockoutOnFailure: true);
+
+            if (account is not null)
+                await securityEvents.RecordFromRequestAsync(account.Id, "login.password", result.Succeeded, context);
+
+            return result.Succeeded
+                ? Results.Ok(new { authenticated = true })
+                : Results.Problem(statusCode: StatusCodes.Status401Unauthorized, title: "Sign-in failed.");
+        }).AllowAnonymous().RequireRateLimiting(AuthenticationConfiguration.AuthenticationRateLimitPolicy);
+
         var account = endpoints.MapGroup("/account")
             .AllowAnonymous()
             .WithTags("Authentication");
@@ -180,4 +198,10 @@ public sealed class LoginForm
     public string Code { get; init; } = string.Empty;
     public string RecoveryCode { get; init; } = string.Empty;
     public string ReturnUrl { get; init; } = "/";
+}
+
+public sealed class LoginRequest
+{
+    public string Email { get; init; } = string.Empty;
+    public string Password { get; init; } = string.Empty;
 }
