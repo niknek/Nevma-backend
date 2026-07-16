@@ -14,9 +14,12 @@ public static class AuthenticationEndpoints
         endpoints.MapPost("/api/auth/register", async (
             RegisterUserRequest request,
             IRegistrationService service,
+            IAccountRecoveryService recoveryService,
             CancellationToken cancellationToken) =>
         {
             var result = await service.RegisterAsync(request, cancellationToken);
+            if (result.IsSuccess && result.User is not null)
+                await recoveryService.RequestEmailConfirmationAsync(result.User.Id, cancellationToken);
             return result.IsSuccess
                 ? Results.Created("/api/users/me", result.User)
                 : Results.ValidationProblem(result.Errors);
