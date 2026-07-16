@@ -22,6 +22,7 @@ app.UseAuthorization();
 app.UseAntiforgery();
 app.MapHealthChecks("/health");
 app.MapAccountEndpoints();
+app.MapExternalAuthenticationEndpoints();
 app.MapAccountRecoveryEndpoints();
 app.MapAuthenticationEndpoints();
 app.MapMultiFactorAuthenticationEndpoints();

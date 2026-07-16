@@ -1,6 +1,8 @@
 using System.Security.Cryptography.X509Certificates;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Facebook;
+using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
@@ -50,6 +52,8 @@ public static class AuthenticationConfiguration
                     cookie.ExpireTimeSpan = TimeSpan.FromMinutes(15);
                 });
             });
+
+        AddExternalProviders(services, configuration);
 
         services.AddAuthorization();
         services.AddAntiforgery(options =>
@@ -111,6 +115,35 @@ public static class AuthenticationConfiguration
             });
 
         return services;
+    }
+
+    private static void AddExternalProviders(IServiceCollection services, IConfiguration configuration)
+    {
+        var googleClientId = configuration["Authentication:Google:ClientId"];
+        var googleClientSecret = configuration["Authentication:Google:ClientSecret"];
+        if (!string.IsNullOrWhiteSpace(googleClientId) && !string.IsNullOrWhiteSpace(googleClientSecret))
+        {
+            services.AddAuthentication().AddGoogle("Google", options =>
+            {
+                options.ClientId = googleClientId;
+                options.ClientSecret = googleClientSecret;
+                options.SignInScheme = IdentityConstants.ExternalScheme;
+            });
+        }
+
+        var facebookAppId = configuration["Authentication:Facebook:AppId"];
+        var facebookAppSecret = configuration["Authentication:Facebook:AppSecret"];
+        if (!string.IsNullOrWhiteSpace(facebookAppId) && !string.IsNullOrWhiteSpace(facebookAppSecret))
+        {
+            services.AddAuthentication().AddFacebook("Facebook", options =>
+            {
+                options.AppId = facebookAppId;
+                options.AppSecret = facebookAppSecret;
+                options.SignInScheme = IdentityConstants.ExternalScheme;
+                options.Fields.Add("name");
+                options.Fields.Add("email");
+            });
+        }
     }
 
     private static RateLimitPartition<string> CreateAuthenticationPartition(HttpContext context) =>

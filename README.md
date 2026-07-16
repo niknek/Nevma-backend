@@ -119,6 +119,13 @@ Development seeds the public `nevma-mobile` client. Non-development environments
 signing and encryption PFX certificates through the `Authentication__*CertificatePath` and
 `Authentication__*CertificatePassword` configuration keys.
 
+External Google and Facebook sign-in challenges are available at `/identity/account/external/google`
+and `/identity/account/external/facebook`. They remain disabled until their client credentials are
+provided through `Authentication__Google__*` and `Authentication__Facebook__*` environment variables.
+The callback signs the user into the existing Identity cookie and returns to the OpenIddict flow;
+provider secrets never belong in the frontend. Instagram requires Meta's separate Instagram Login
+adapter and is intentionally not treated as a Facebook alias.
+
 Mobile authorization requests should include `device_id`, `device_name`, and `device_platform`.
 Identity binds the resulting access and refresh tokens to a durable device session. Authenticated
 clients can list sessions at `GET /api/auth/sessions` and revoke one with
