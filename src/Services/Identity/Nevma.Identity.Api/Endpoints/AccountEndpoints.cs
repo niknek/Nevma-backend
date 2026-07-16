@@ -76,9 +76,15 @@ public static class AccountEndpoints
                     "text/html; charset=utf-8");
             }
 
-            return result.Succeeded
-                ? Results.Redirect(GetSafeReturnUrl(form.ReturnUrl, environment.IsDevelopment()))
-                : Results.Problem(
+            if (result.Succeeded)
+            {
+                var redirectUrl = GetSafeReturnUrl(form.ReturnUrl, environment.IsDevelopment());
+                if (environment.IsDevelopment() && Uri.TryCreate(redirectUrl, UriKind.Absolute, out _))
+                    redirectUrl += redirectUrl.Contains('?') ? "&signedIn=1" : "?signedIn=1";
+                return Results.Redirect(redirectUrl);
+            }
+
+            return Results.Problem(
                     statusCode: StatusCodes.Status401Unauthorized,
                     title: "Sign-in failed.",
                     detail: "The credentials are invalid or the account is temporarily unavailable.");
