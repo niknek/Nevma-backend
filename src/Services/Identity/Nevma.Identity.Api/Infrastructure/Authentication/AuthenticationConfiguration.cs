@@ -22,6 +22,7 @@ public static class AuthenticationConfiguration
         IConfiguration configuration,
         IWebHostEnvironment environment)
     {
+        var localDevelopment = environment.IsDevelopment();
         services
             .AddIdentityCore<IdentityAccount>(ConfigureIdentity)
             .AddRoles<IdentityRole<Guid>>()
@@ -42,10 +43,12 @@ public static class AuthenticationConfiguration
 
                 options.ApplicationCookie.Configure(cookie =>
                 {
-                    cookie.Cookie.Name = "__Host-Nevma.Identity";
+                    cookie.Cookie.Name = localDevelopment ? "Nevma.Identity" : "__Host-Nevma.Identity";
                     cookie.Cookie.HttpOnly = true;
                     cookie.Cookie.SameSite = SameSiteMode.Lax;
-                    cookie.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+                    cookie.Cookie.SecurePolicy = localDevelopment
+                        ? CookieSecurePolicy.SameAsRequest
+                        : CookieSecurePolicy.Always;
                     cookie.LoginPath = "/account/login";
                     cookie.LogoutPath = "/connect/logout";
                     cookie.SlidingExpiration = false;
@@ -58,10 +61,12 @@ public static class AuthenticationConfiguration
         services.AddAuthorization();
         services.AddAntiforgery(options =>
         {
-            options.Cookie.Name = "__Host-Nevma.Antiforgery";
+            options.Cookie.Name = localDevelopment ? "Nevma.Antiforgery" : "__Host-Nevma.Antiforgery";
             options.Cookie.HttpOnly = true;
             options.Cookie.SameSite = SameSiteMode.Strict;
-            options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+            options.Cookie.SecurePolicy = localDevelopment
+                ? CookieSecurePolicy.SameAsRequest
+                : CookieSecurePolicy.Always;
         });
         services.AddRateLimiter(options =>
         {
