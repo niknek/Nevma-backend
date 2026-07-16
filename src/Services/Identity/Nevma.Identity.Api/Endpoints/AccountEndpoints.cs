@@ -19,14 +19,16 @@ public static class AccountEndpoints
         account.MapGet("/login", (HttpContext context, string? returnUrl) =>
         {
             SetSensitiveResponseHeaders(context.Response);
-            return Results.Content(BuildPasswordLoginPage(context, returnUrl), "text/html; charset=utf-8");
+            var isDevelopment = context.RequestServices.GetRequiredService<IHostEnvironment>().IsDevelopment();
+            return Results.Content(BuildPasswordLoginPage(context, returnUrl, isDevelopment), "text/html; charset=utf-8");
         });
 
         account.MapPost("/login", async (
             [FromForm] LoginForm form,
             HttpContext context,
             SignInManager<IdentityAccount> signInManager,
-            SecurityEventService securityEvents) =>
+            SecurityEventService securityEvents,
+            IHostEnvironment environment) =>
         {
             SetSensitiveResponseHeaders(context.Response);
             IdentityAccount? account;
@@ -70,12 +72,12 @@ public static class AccountEndpoints
             if (result.RequiresTwoFactor)
             {
                 return Results.Content(
-                    BuildTwoFactorLoginPage(context, form.ReturnUrl),
+                    BuildTwoFactorLoginPage(context, form.ReturnUrl, environment.IsDevelopment()),
                     "text/html; charset=utf-8");
             }
 
             return result.Succeeded
-                ? Results.LocalRedirect(GetSafeReturnUrl(form.ReturnUrl))
+                ? Results.Redirect(GetSafeReturnUrl(form.ReturnUrl, environment.IsDevelopment()))
                 : Results.Problem(
                     statusCode: StatusCodes.Status401Unauthorized,
                     title: "Sign-in failed.",
@@ -86,7 +88,7 @@ public static class AccountEndpoints
         return endpoints;
     }
 
-    private static string BuildPasswordLoginPage(HttpContext context, string? returnUrl) => $$"""
+    private static string BuildPasswordLoginPage(HttpContext context, string? returnUrl, bool isDevelopment) => $$"""
         <!doctype html>
         <html lang="en">
         <head>
@@ -99,7 +101,7 @@ public static class AccountEndpoints
                 <h1>Sign in to Nevma</h1>
                 <form method="post" action="/account/login">
                     <input type="hidden" name="__RequestVerificationToken" value="{{WebUtility.HtmlEncode(CreateAntiforgeryToken(context))}}">
-                    <input type="hidden" name="ReturnUrl" value="{{WebUtility.HtmlEncode(GetSafeReturnUrl(returnUrl))}}">
+                    <input type="hidden" name="ReturnUrl" value="{{WebUtility.HtmlEncode(GetSafeReturnUrl(returnUrl, isDevelopment))}}">
                     <label>Email <input name="Email" type="email" autocomplete="username" required></label>
                     <label>Password <input name="Password" type="password" autocomplete="current-password" required></label>
                     <button type="submit">Sign in</button>
@@ -109,7 +111,7 @@ public static class AccountEndpoints
         </html>
         """;
 
-    private static string BuildTwoFactorLoginPage(HttpContext context, string? returnUrl) => $$"""
+    private static string BuildTwoFactorLoginPage(HttpContext context, string? returnUrl, bool isDevelopment) => $$"""
         <!doctype html>
         <html lang="en">
         <head>
@@ -122,7 +124,7 @@ public static class AccountEndpoints
                 <h1>Two-step verification</h1>
                 <form method="post" action="/account/login">
                     <input type="hidden" name="__RequestVerificationToken" value="{{WebUtility.HtmlEncode(CreateAntiforgeryToken(context))}}">
-                    <input type="hidden" name="ReturnUrl" value="{{WebUtility.HtmlEncode(GetSafeReturnUrl(returnUrl))}}">
+                    <input type="hidden" name="ReturnUrl" value="{{WebUtility.HtmlEncode(GetSafeReturnUrl(returnUrl, isDevelopment))}}">
                     <label>Authenticator code <input name="Code" inputmode="numeric" autocomplete="one-time-code"></label>
                     <p>Or use one of your recovery codes.</p>
                     <label>Recovery code <input name="RecoveryCode" autocomplete="one-time-code"></label>
@@ -149,7 +151,14 @@ public static class AccountEndpoints
         response.Headers.Pragma = "no-cache";
     }
 
-    private static string GetSafeReturnUrl(string? returnUrl) =>
+    private static string GetSafeReturnUrl(string? returnUrl, bool isDevelopment) =>
+        isDevelopment &&
+        Uri.TryCreate(returnUrl, UriKind.Absolute, out var absoluteUri) &&
+        absoluteUri.Scheme == Uri.UriSchemeHttp &&
+        (absoluteUri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase) || absoluteUri.Host == "127.0.0.1") &&
+        absoluteUri.Port == 5173
+            ? absoluteUri.ToString()
+            :
         !string.IsNullOrWhiteSpace(returnUrl) &&
         Uri.IsWellFormedUriString(returnUrl, UriKind.Relative) &&
         returnUrl.StartsWith("/", StringComparison.Ordinal) &&
