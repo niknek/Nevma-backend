@@ -18,6 +18,7 @@ public static class PersonalCalendarEndpoints
         group.MapPost("/", async (PersonalEventRequest request, HttpContext context, PlanningDbContext db, TimeProvider clock, CancellationToken ct) =>
         {
             if (!TryUser(context, out var userId)) return Results.Unauthorized();
+            var validation = ValidateDate(request, clock.GetUtcNow()); if (validation is not null) return validation;
             var item = PersonalCalendarEvent.Create(userId, request.Title, request.Purpose, request.Location, request.StartsAt, request.EndsAt, clock.GetUtcNow());
             db.PersonalCalendarEvents.Add(item); await db.SaveChangesAsync(ct);
             return Results.Created($"/api/personal-calendar/{item.Id}", item);
@@ -27,10 +28,18 @@ public static class PersonalCalendarEndpoints
             if (!TryUser(context, out var userId)) return Results.Unauthorized();
             var item = await db.PersonalCalendarEvents.SingleOrDefaultAsync(x => x.Id == id && x.UserId == userId, ct);
             if (item is null) return Results.NotFound();
+            var validation = ValidateDate(request, clock.GetUtcNow()); if (validation is not null) return validation;
             item.Update(request.Title, request.Purpose, request.Location, request.StartsAt, request.EndsAt, clock.GetUtcNow());
             await db.SaveChangesAsync(ct); return Results.Ok(item);
         });
         return endpoints;
+    }
+
+    private static IResult? ValidateDate(PersonalEventRequest request, DateTimeOffset now)
+    {
+        if (request.StartsAt < now.AddMinutes(-1)) return Results.ValidationProblem(new Dictionary<string, string[]> { ["startsAt"] = ["Appointments cannot be scheduled in the past."] });
+        if (request.StartsAt > now.AddYears(10)) return Results.ValidationProblem(new Dictionary<string, string[]> { ["startsAt"] = ["Appointments can be scheduled up to 10 years ahead."] });
+        return null;
     }
 
     private static bool TryUser(HttpContext context, out Guid userId) =>
