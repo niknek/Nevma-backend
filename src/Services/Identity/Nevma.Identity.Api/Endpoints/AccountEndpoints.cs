@@ -25,8 +25,8 @@ public static class AccountEndpoints
             if (account is not null)
                 await securityEvents.RecordFromRequestAsync(account.Id, "login.password", result.Succeeded, context);
 
-            return result.Succeeded
-                ? Results.Ok(new { authenticated = true })
+            return result.Succeeded && account is not null
+                ? Results.Ok(new { authenticated = true, userId = account.Id })
                 : Results.Problem(statusCode: StatusCodes.Status401Unauthorized, title: "Sign-in failed.");
         }).AllowAnonymous().RequireRateLimiting(AuthenticationConfiguration.AuthenticationRateLimitPolicy);
 

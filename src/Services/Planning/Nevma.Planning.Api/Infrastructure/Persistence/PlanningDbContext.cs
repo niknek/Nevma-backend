@@ -14,6 +14,7 @@ public sealed class PlanningDbContext(DbContextOptions<PlanningDbContext> option
 {
     public DbSet<MeetingInvitation> MeetingInvitations => Set<MeetingInvitation>();
     public DbSet<CalendarEvent> CalendarEvents => Set<CalendarEvent>();
+    public DbSet<PersonalCalendarEvent> PersonalCalendarEvents => Set<PersonalCalendarEvent>();
     public DbSet<TaskItem> Tasks => Set<TaskItem>();
     public DbSet<TaskShare> TaskShares => Set<TaskShare>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();

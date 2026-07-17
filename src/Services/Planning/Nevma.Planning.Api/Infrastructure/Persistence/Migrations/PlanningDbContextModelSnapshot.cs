@@ -81,6 +81,44 @@ namespace Nevma.Planning.Api.Infrastructure.Persistence.Migrations
                     b.ToTable("calendar_events", "planning");
                 });
 
+            modelBuilder.Entity("Nevma.Planning.Api.Domain.Calendar.PersonalCalendarEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("EndsAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Location")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Purpose")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTimeOffset>("StartsAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "StartsAt");
+
+                    b.ToTable("personal_calendar_events", "planning");
+                });
+
             modelBuilder.Entity("Nevma.Planning.Api.Domain.MeetingInvitations.MeetingInvitation", b =>
                 {
                     b.Property<Guid>("Id")

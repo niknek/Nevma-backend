@@ -21,6 +21,7 @@ app.UseAuthorization();
 app.MapHealthChecks("/health");
 app.MapMeetingInvitationEndpoints();
 app.MapCalendarEndpoints();
+app.MapPersonalCalendarEndpoints();
 app.MapTaskEndpoints();
 app.MapSearchEndpoints();
 
