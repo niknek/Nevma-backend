@@ -97,4 +97,17 @@ function Set-NevmaProcessEnvironment {
     $env:OpenTelemetry__Otlp__Endpoint = 'http://localhost:4317'
     $env:Redis__Enabled = 'true'
     $env:Redis__ConnectionString = "localhost:6379,password=$($Values['REDIS_PASSWORD']),ssl=False,abortConnect=False"
+
+    foreach ($name in @(
+        'CommandAI__Enabled',
+        'CommandAI__Endpoint',
+        'CommandAI__ApiKey',
+        'CommandAI__Model',
+        'CommandAI__TranscriptionEndpoint',
+        'CommandAI__TranscriptionModel'
+    )) {
+        if ($Values.ContainsKey($name) -and -not [string]::IsNullOrWhiteSpace($Values[$name])) {
+            [System.Environment]::SetEnvironmentVariable($name, $Values[$name], 'Process')
+        }
+    }
 }

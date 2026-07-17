@@ -2,6 +2,27 @@ namespace Nevma.Contracts.Commands;
 
 public sealed record PreviewCommandRequest(string Transcript, string IdempotencyKey);
 
+public sealed record AssistantRequest(
+    string Message,
+    string IdempotencyKey,
+    string? Locale,
+    int? UtcOffsetMinutes,
+    string? SelectedDate,
+    IReadOnlyCollection<AssistantCalendarEvent> CalendarEvents);
+
+public sealed record AssistantCalendarEvent(
+    Guid Id,
+    string Title,
+    string? Purpose,
+    string? Location,
+    DateTimeOffset StartsAt,
+    DateTimeOffset EndsAt);
+
+public sealed record AssistantResponse(
+    string Reply,
+    string DetectedLanguage,
+    CommandResponse? ProposedCommand);
+
 public sealed record SpeechTranscriptionResponse(string Transcript, double? Confidence);
 
 public sealed record CommandResponse(
@@ -26,6 +47,8 @@ public enum CommandIntent
     AcceptMeeting,
     DeclineMeeting,
     CancelMeeting,
-    SendMessage
+    SendMessage,
+    CreateCalendarEvent,
+    UpdateCalendarEvent
 }
 public enum CommandStatus { Previewed, Executing, Executed, Failed, Undone }

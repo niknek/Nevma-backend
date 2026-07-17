@@ -76,7 +76,7 @@ public sealed class CommandService(
         return command is null ? null : ToResponse(command);
     }
 
-    private static CommandResponse ToResponse(CommandRequest command) =>
+    internal static CommandResponse ToResponse(CommandRequest command) =>
         new(command.Id, command.Intent, command.Status, command.Summary, command.ArgumentsJson,
             true, command.ResultResource, command.Error, command.CreatedAt, command.ExecutedAt);
 }

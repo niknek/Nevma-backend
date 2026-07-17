@@ -1,4 +1,5 @@
 using Nevma.Commands.Api.Domain;
+using Nevma.Contracts.Commands;
 
 namespace Nevma.Commands.Api.Application;
 
@@ -18,6 +19,13 @@ public interface IAiProvider
     Task<AiInterpretationResult> InterpretAsync(
         string transcript,
         DateTimeOffset now,
+        CancellationToken cancellationToken = default);
+}
+public interface IAiAssistantProvider
+{
+    Task<AssistantProviderResult> RespondAsync(
+        AssistantRequest request,
+        DateTimeOffset localNow,
         CancellationToken cancellationToken = default);
 }
 public interface ICommandValidator
@@ -54,4 +62,9 @@ public abstract record SpeechToTextResult
     public sealed record Transcribed(string Transcript, double? Confidence) : SpeechToTextResult;
     public sealed record Invalid(string Message) : SpeechToTextResult;
     public sealed record Unavailable : SpeechToTextResult;
+}
+public abstract record AssistantProviderResult
+{
+    public sealed record Completed(string Reply, string DetectedLanguage, ParsedCommand? Command) : AssistantProviderResult;
+    public sealed record Unavailable(string Message) : AssistantProviderResult;
 }

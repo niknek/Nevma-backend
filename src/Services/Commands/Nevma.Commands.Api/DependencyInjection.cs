@@ -29,13 +29,18 @@ public static class DependencyInjection
             .AddHttpClient<HttpAiProvider>(client => client.Timeout = Timeout.InfiniteTimeSpan)
             .AddNevmaResilience(TimeSpan.FromSeconds(20), TimeSpan.FromSeconds(8));
         services
-            .AddHttpClient<HttpSpeechToTextProvider>(client => client.Timeout = Timeout.InfiniteTimeSpan)
+            .AddHttpClient<OpenAiSpeechToTextProvider>(client => client.Timeout = Timeout.InfiniteTimeSpan)
             .AddNevmaResilience(TimeSpan.FromMinutes(2), TimeSpan.FromSeconds(45));
         services.AddTransient<IAiProvider, HttpAiProvider>();
-        services.AddTransient<ISpeechToTextProvider, HttpSpeechToTextProvider>();
+        services
+            .AddHttpClient<OpenAiAssistantProvider>(client => client.Timeout = Timeout.InfiniteTimeSpan)
+            .AddNevmaResilience(TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(20));
+        services.AddTransient<IAiAssistantProvider, OpenAiAssistantProvider>();
+        services.AddTransient<ISpeechToTextProvider, OpenAiSpeechToTextProvider>();
         services.AddTransient<IIntentParser, HybridIntentParser>();
         services.AddScoped<ICommandExecutor, BackendCommandExecutor>();
         services.AddScoped<CommandService>();
+        services.AddScoped<AssistantService>();
         services
             .AddHttpClient("Planning", client => client.BaseAddress = new Uri(configuration["Services:Planning"] ?? "http://localhost:5276"))
             .AddNevmaResilience();

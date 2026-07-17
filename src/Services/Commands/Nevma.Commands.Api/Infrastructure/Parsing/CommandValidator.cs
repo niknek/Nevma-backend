@@ -31,6 +31,8 @@ public sealed class CommandValidator : ICommandValidator
                     CommandIntent.CancelMeeting => ValidateResource(command),
                 CommandIntent.SendMessage => ValidateMessage(command),
                 CommandIntent.ShareTask => ValidateTaskShare(command),
+                CommandIntent.CreateCalendarEvent => ValidateCalendarEvent(command, now),
+                CommandIntent.UpdateCalendarEvent => ValidateCalendarEventUpdate(command, now),
                 _ => new ParseResult.Invalid("The proposed command intent is not supported.")
             };
         }
@@ -84,4 +86,31 @@ public sealed class CommandValidator : ICommandValidator
             ? new ParseResult.Parsed(command)
             : new ParseResult.Invalid("Task sharing arguments are invalid.");
     }
+
+    private static ParseResult ValidateCalendarEvent(ParsedCommand command, DateTimeOffset now)
+    {
+        var request = JsonSerializer.Deserialize<CreateCalendarEventCommandArguments>(command.ArgumentsJson, JsonOptions);
+        return request is not null && ValidCalendarValues(
+            request.Title, request.Purpose, request.Location, request.StartsAt, request.EndsAt, now)
+            ? new ParseResult.Parsed(command)
+            : new ParseResult.Invalid("Calendar event arguments are invalid or outside the supported limits.");
+    }
+
+    private static ParseResult ValidateCalendarEventUpdate(ParsedCommand command, DateTimeOffset now)
+    {
+        var request = JsonSerializer.Deserialize<UpdateCalendarEventCommandArguments>(command.ArgumentsJson, JsonOptions);
+        return request is not null && request.Id != Guid.Empty && ValidCalendarValues(
+            request.Title, request.Purpose, request.Location, request.StartsAt, request.EndsAt, now)
+            ? new ParseResult.Parsed(command)
+            : new ParseResult.Invalid("Calendar event update arguments are invalid or outside the supported limits.");
+    }
+
+    private static bool ValidCalendarValues(
+        string title, string? purpose, string? location,
+        DateTimeOffset startsAt, DateTimeOffset endsAt, DateTimeOffset now) =>
+        !string.IsNullOrWhiteSpace(title) && title.Length <= 200 &&
+        (purpose is null || purpose.Length <= 2_000) &&
+        (location is null || location.Length <= 300) &&
+        startsAt >= now.AddMinutes(-1) && startsAt <= now.AddYears(10) &&
+        endsAt > startsAt && endsAt - startsAt <= TimeSpan.FromDays(7);
 }

@@ -26,8 +26,9 @@ app.Use(async (context, next) =>
 {
     const long standardLimit = 1024 * 1024;
     const long uploadLimit = 26L * 1024 * 1024;
-    if (context.Request.ContentLength >
-        (context.Request.Path.StartsWithSegments("/files") ? uploadLimit : standardLimit))
+    var isUpload = context.Request.Path.StartsWithSegments("/files") ||
+        context.Request.Path.StartsWithSegments("/commands/api/commands/transcribe");
+    if (context.Request.ContentLength > (isUpload ? uploadLimit : standardLimit))
     {
         context.Response.StatusCode = StatusCodes.Status413PayloadTooLarge;
         return;

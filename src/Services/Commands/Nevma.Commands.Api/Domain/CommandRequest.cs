@@ -61,3 +61,16 @@ public sealed record ParsedCommand(CommandIntent Intent, string Summary, string 
 public sealed record ResourceCommandArguments(Guid Id);
 public sealed record SendMessageCommandArguments(Guid ConversationId, string Text);
 public sealed record ShareTaskCommandArguments(Guid TaskId, Guid UserId, bool CanEdit);
+public sealed record CreateCalendarEventCommandArguments(
+    string Title,
+    string? Purpose,
+    string? Location,
+    DateTimeOffset StartsAt,
+    DateTimeOffset EndsAt);
+public sealed record UpdateCalendarEventCommandArguments(
+    Guid Id,
+    string Title,
+    string? Purpose,
+    string? Location,
+    DateTimeOffset StartsAt,
+    DateTimeOffset EndsAt);

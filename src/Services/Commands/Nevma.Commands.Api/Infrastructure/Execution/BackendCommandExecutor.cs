@@ -20,7 +20,7 @@ public sealed class BackendCommandExecutor(IHttpClientFactory clientFactory) : I
             return new ExecutionResult(false, null, "The command intent is not supported.");
 
         using var request = target.Request;
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        AddUserCredentials(request, command, accessToken);
         if (target.IncludeArguments)
             request.Content = new StringContent(command.ArgumentsJson, Encoding.UTF8, "application/json");
 
@@ -80,7 +80,7 @@ public sealed class BackendCommandExecutor(IHttpClientFactory clientFactory) : I
         if (undo is null) return false;
 
         using var request = new HttpRequestMessage(undo.Method, undo.Path);
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        AddUserCredentials(request, command, accessToken);
         try
         {
             using var response = await clientFactory.CreateClient(undo.ClientName).SendAsync(request, cancellationToken);
@@ -104,6 +104,9 @@ public sealed class BackendCommandExecutor(IHttpClientFactory clientFactory) : I
             message = JsonSerializer.Deserialize<SendMessageCommandArguments>(command.ArgumentsJson);
         if (command.Intent == CommandIntent.ShareTask)
             share = JsonSerializer.Deserialize<ShareTaskCommandArguments>(command.ArgumentsJson);
+        UpdateCalendarEventCommandArguments? calendarUpdate = null;
+        if (command.Intent == CommandIntent.UpdateCalendarEvent)
+            calendarUpdate = JsonSerializer.Deserialize<UpdateCalendarEventCommandArguments>(command.ArgumentsJson);
 
         return command.Intent switch
         {
@@ -127,8 +130,21 @@ public sealed class BackendCommandExecutor(IHttpClientFactory clientFactory) : I
                 new(HttpMethod.Post, $"/api/tasks/{share.TaskId}/collaborators"),
                 true,
                 $"tasks/{share.TaskId:N}/collaborators/{share.UserId:N}"),
+            CommandIntent.CreateCalendarEvent => new(
+                "Planning", new(HttpMethod.Post, "/api/personal-calendar/"), true, "personal-calendar"),
+            CommandIntent.UpdateCalendarEvent when calendarUpdate is not null => new(
+                "Planning", new(HttpMethod.Put, $"/api/personal-calendar/{calendarUpdate.Id}"), true,
+                $"personal-calendar/{calendarUpdate.Id:N}"),
             _ => null
         };
+    }
+
+    private static void AddUserCredentials(HttpRequestMessage request, CommandRequest command, string accessToken)
+    {
+        if (!string.IsNullOrWhiteSpace(accessToken))
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        else
+            request.Headers.Add("X-Nevma-User-Id", command.UserId.ToString());
     }
 
     private static CommandTarget MeetingAction(Guid id, string action) => new(

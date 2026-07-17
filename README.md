@@ -230,21 +230,23 @@ deterministic sharing syntax is `share task: <task-id> | <user-id> | edit=true`;
 flag creates a read-only share.
 
 `POST /api/commands/transcribe` accepts an authenticated multipart upload named `audio` (up to
-25 MB). Speech-to-text and natural-language interpretation are provider-neutral HTTP adapters and
-are disabled until their endpoints and secrets are supplied through environment variables:
+25 MB). Nevma uses OpenAI for automatic Greek/English transcription and bilingual assistant
+responses. Add these values to the ignored local `.env`, then restart the local stack:
 
 ```powershell
-$env:SpeechToText__Enabled="true"
-$env:SpeechToText__Endpoint="https://speech-gateway.example.com/transcribe"
-$env:SpeechToText__ApiKey="<secret>"
-$env:CommandAI__Enabled="true"
-$env:CommandAI__Endpoint="https://ai-gateway.example.com/interpret"
-$env:CommandAI__ApiKey="<secret>"
+CommandAI__Enabled=true
+CommandAI__ApiKey=<secret>
+CommandAI__Endpoint=https://api.openai.com/v1/responses
+CommandAI__Model=gpt-4o-mini
+CommandAI__TranscriptionEndpoint=https://api.openai.com/v1/audio/transcriptions
+CommandAI__TranscriptionModel=gpt-4o-transcribe
 ```
 
-The AI gateway receives the untrusted transcript, current UTC time, and the allowed intent names.
-It returns `{ intent, summary, arguments }`. Every proposal is strictly deserialized and validated
-again inside Nevma; an AI response can never bypass authorization, preview, or confirmation.
+The assistant receives the user's local date/time, selected calendar date, and a bounded list of
+their real calendar events. It can answer in Greek or English and propose creating or updating an
+appointment. Every proposal is strictly deserialized and validated again inside Nevma; AI output
+can never bypass authorization, preview, explicit user confirmation, or the ten-year scheduling
+limit. API keys remain on the backend and are never sent to Expo clients.
 
 ## Gateway and observability
 

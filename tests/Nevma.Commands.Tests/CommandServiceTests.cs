@@ -109,6 +109,32 @@ public sealed class CommandServiceTests
         Assert.Equal(CommandStatus.Undone, undone.Command.Status);
     }
 
+    [Fact]
+    public async Task Assistant_calendar_action_stays_a_preview_until_confirmation()
+    {
+        await using var context = CreateContext();
+        var userId = Guid.NewGuid();
+        var parsed = new ParsedCommand(
+            CommandIntent.CreateCalendarEvent,
+            "Create appointment tomorrow at 18:00",
+            "{\"title\":\"Dentist\",\"purpose\":null,\"location\":null," +
+            "\"startsAt\":\"2026-07-16T18:00:00Z\",\"endsAt\":\"2026-07-16T19:00:00Z\"}");
+        var service = new AssistantService(
+            new FakeAssistantProvider(parsed),
+            new CommandValidator(),
+            new EfCommandRepository(context),
+            context,
+            new FixedTimeProvider());
+
+        var result = Assert.IsType<AssistantResult.Completed>(await service.RespondAsync(
+            userId,
+            new AssistantRequest("Book a dentist appointment tomorrow at 6pm", "assistant-1", "en-US", 0, null, [])));
+
+        Assert.NotNull(result.Response.ProposedCommand);
+        Assert.Equal(CommandStatus.Previewed, result.Response.ProposedCommand.Status);
+        Assert.Equal(1, await context.Commands.CountAsync());
+    }
+
     private static CommandService CreateService(CommandsDbContext context, FakeExecutor? executor = null) =>
         new(new EfCommandRepository(context), new RuleBasedIntentParser(), executor ?? new FakeExecutor(), context, new FixedTimeProvider());
     private static CommandsDbContext CreateContext() => new(new DbContextOptionsBuilder<CommandsDbContext>()
@@ -128,5 +154,14 @@ public sealed class CommandServiceTests
             DateTimeOffset now,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<AiInterpretationResult>(new AiInterpretationResult.Proposed(proposal));
+    }
+    private sealed class FakeAssistantProvider(ParsedCommand proposal) : IAiAssistantProvider
+    {
+        public Task<AssistantProviderResult> RespondAsync(
+            AssistantRequest request,
+            DateTimeOffset localNow,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<AssistantProviderResult>(new AssistantProviderResult.Completed(
+                "I prepared the calendar change. Please confirm it.", "en", proposal));
     }
 }
