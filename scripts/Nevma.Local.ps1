@@ -100,11 +100,15 @@ function Set-NevmaProcessEnvironment {
 
     foreach ($name in @(
         'CommandAI__Enabled',
+        'CommandAI__Provider',
         'CommandAI__Endpoint',
         'CommandAI__ApiKey',
         'CommandAI__Model',
         'CommandAI__TranscriptionEndpoint',
         'CommandAI__TranscriptionModel'
+        'SpeechToText__Enabled'
+        'SpeechToText__Provider'
+        'SpeechToText__Endpoint'
     )) {
         if ($Values.ContainsKey($name) -and -not [string]::IsNullOrWhiteSpace($Values[$name])) {
             [System.Environment]::SetEnvironmentVariable($name, $Values[$name], 'Process')

@@ -5,6 +5,7 @@ namespace Nevma.Commands.Api.Application;
 
 public sealed class AssistantService(
     IAiAssistantProvider provider,
+    BilingualTemporalNormalizer temporalNormalizer,
     ICommandValidator validator,
     ICommandRepository repository,
     ICommandsUnitOfWork unitOfWork,
@@ -30,9 +31,31 @@ public sealed class AssistantService(
 
         var completed = (AssistantProviderResult.Completed)result;
         CommandResponse? commandResponse = null;
-        if (completed.Command is not null)
+        var proposedCommand = completed.Command;
+        string? fallbackReply = null;
+        if (proposedCommand is null)
         {
-            var validation = validator.Validate(completed.Command, localNow);
+            var fallback = temporalNormalizer.TryCreateFallback(
+                request.Message, localNow, completed.DetectedLanguage);
+            proposedCommand = fallback.Command;
+            if (proposedCommand is null && fallback.Clarification is not null)
+                return new AssistantResult.Completed(new AssistantResponse(
+                    fallback.Clarification, completed.DetectedLanguage, null));
+            if (proposedCommand is not null)
+                fallbackReply = completed.DetectedLanguage == "el"
+                    ? "Ετοίμασα το ραντεβού. Έλεγξε τα στοιχεία και επιβεβαίωσέ το."
+                    : "I prepared the appointment. Review the details and confirm it.";
+        }
+
+        if (proposedCommand is not null)
+        {
+            var normalization = temporalNormalizer.Normalize(
+                request.Message, proposedCommand, localNow, completed.DetectedLanguage);
+            if (normalization.Command is null)
+                return new AssistantResult.Completed(new AssistantResponse(
+                    normalization.Clarification!, completed.DetectedLanguage, null));
+
+            var validation = validator.Validate(normalization.Command, localNow);
             if (validation is not ParseResult.Parsed parsed)
                 return new AssistantResult.Invalid("message", ((ParseResult.Invalid)validation).Message);
 
@@ -54,7 +77,7 @@ public sealed class AssistantService(
         }
 
         return new AssistantResult.Completed(new AssistantResponse(
-            completed.Reply,
+            fallbackReply ?? completed.Reply,
             completed.DetectedLanguage,
             commandResponse));
     }

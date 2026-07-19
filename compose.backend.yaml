@@ -203,18 +203,23 @@ services:
       <<: [*common-environment, *database-environment]
       Services__Planning: http://planning:8080
       Services__Messaging: http://messaging:8080
-      CommandAI__Enabled: ${COMMAND_AI_ENABLED:-false}
-      CommandAI__Endpoint: ${COMMAND_AI_ENDPOINT:-}
-      CommandAI__ApiKey: ${COMMAND_AI_API_KEY:-}
-      SpeechToText__Enabled: ${SPEECH_TO_TEXT_ENABLED:-false}
-      SpeechToText__Endpoint: ${SPEECH_TO_TEXT_ENDPOINT:-}
-      SpeechToText__ApiKey: ${SPEECH_TO_TEXT_API_KEY:-}
+      CommandAI__Enabled: "true"
+      CommandAI__Provider: Ollama
+      CommandAI__Endpoint: http://ollama:11434/api/chat
+      CommandAI__Model: qwen3:1.7b
+      SpeechToText__Enabled: "true"
+      SpeechToText__Provider: WhisperCpp
+      SpeechToText__Endpoint: http://whisper:8080/inference
     depends_on:
       migrations:
         condition: service_completed_successfully
       planning:
         condition: service_healthy
       messaging:
+        condition: service_healthy
+      ollama-model:
+        condition: service_completed_successfully
+      whisper:
         condition: service_healthy
 
   gateway:

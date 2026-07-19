@@ -1,0 +1,206 @@
+using System.Globalization;
+using System.Text;
+using System.Text.Json;
+using System.Text.RegularExpressions;
+using Nevma.Commands.Api.Domain;
+using Nevma.Contracts.Commands;
+
+namespace Nevma.Commands.Api.Application;
+
+public sealed partial class BilingualTemporalNormalizer
+{
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly IReadOnlyDictionary<string, DayOfWeek> Weekdays = new Dictionary<string, DayOfWeek>
+    {
+        ["monday"] = DayOfWeek.Monday, ["δευτερα"] = DayOfWeek.Monday,
+        ["tuesday"] = DayOfWeek.Tuesday, ["τριτη"] = DayOfWeek.Tuesday,
+        ["wednesday"] = DayOfWeek.Wednesday, ["τεταρτη"] = DayOfWeek.Wednesday,
+        ["thursday"] = DayOfWeek.Thursday, ["πεμπτη"] = DayOfWeek.Thursday,
+        ["friday"] = DayOfWeek.Friday, ["παρασκευη"] = DayOfWeek.Friday,
+        ["saturday"] = DayOfWeek.Saturday, ["σαββατο"] = DayOfWeek.Saturday,
+        ["sunday"] = DayOfWeek.Sunday, ["κυριακη"] = DayOfWeek.Sunday
+    };
+
+    public TemporalNormalizationResult Normalize(
+        string message,
+        ParsedCommand command,
+        DateTimeOffset localNow,
+        string detectedLanguage)
+    {
+        if (command.Intent is not (CommandIntent.CreateCalendarEvent or CommandIntent.UpdateCalendarEvent))
+            return new TemporalNormalizationResult(command, null);
+
+        var normalized = RemoveDiacritics(message).ToLowerInvariant();
+        var relativeDate = ResolveRelativeDate(normalized, localNow);
+        var explicitTime = ResolveTime(normalized);
+        if (relativeDate is not null && explicitTime is null)
+            return new TemporalNormalizationResult(null, detectedLanguage == "el"
+                ? "Ποια ακριβώς ώρα θέλεις να γίνει το ραντεβού;"
+                : "What exact time should the appointment start?");
+
+        try
+        {
+            return command.Intent == CommandIntent.CreateCalendarEvent
+                ? NormalizeCreate(command, relativeDate, explicitTime, localNow)
+                : NormalizeUpdate(command, relativeDate, explicitTime, localNow);
+        }
+        catch (JsonException)
+        {
+            return new TemporalNormalizationResult(command, null);
+        }
+    }
+
+    public TemporalNormalizationResult TryCreateFallback(
+        string message,
+        DateTimeOffset localNow,
+        string detectedLanguage)
+    {
+        var normalized = RemoveDiacritics(message).ToLowerInvariant();
+        var isGreekRequest = GreekCreateIntent().IsMatch(normalized);
+        var isEnglishRequest = EnglishCreateIntent().IsMatch(normalized);
+        if (!isGreekRequest && !isEnglishRequest)
+            return new TemporalNormalizationResult(null, null);
+
+        var date = ResolveRelativeDate(normalized, localNow);
+        var time = ResolveTime(normalized);
+        if (date is null || time is null)
+            return new TemporalNormalizationResult(null, detectedLanguage == "el"
+                ? "Ποια ακριβώς ημέρα και ώρα θέλεις να γίνει το ραντεβού;"
+                : "What exact date and time should the appointment start?");
+
+        var title = isGreekRequest
+            ? (normalized.Contains("οδοντιατρ", StringComparison.Ordinal) ? "Ραντεβού με οδοντίατρο" : "Ραντεβού")
+            : (normalized.Contains("dentist", StringComparison.Ordinal) ? "Dentist appointment" : "Appointment");
+        var startsAt = new DateTimeOffset(date.Value.ToDateTime(time.Value), localNow.Offset);
+        var arguments = new CreateCalendarEventCommandArguments(
+            title, message.Trim(), null, startsAt, startsAt.AddHours(1));
+        var command = new ParsedCommand(
+            CommandIntent.CreateCalendarEvent,
+            detectedLanguage == "el" ? $"Δημιουργία: {title}" : $"Create: {title}",
+            JsonSerializer.Serialize(arguments, JsonOptions));
+        return new TemporalNormalizationResult(command, null);
+    }
+
+    private static TemporalNormalizationResult NormalizeCreate(
+        ParsedCommand command, DateOnly? date, TimeOnly? time, DateTimeOffset localNow)
+    {
+        var request = JsonSerializer.Deserialize<CreateCalendarEventCommandArguments>(command.ArgumentsJson, JsonOptions);
+        if (request is null) return new TemporalNormalizationResult(command, null);
+        var (startsAt, endsAt) = NormalizeRange(request.StartsAt, request.EndsAt, date, time, localNow.Offset);
+        var json = JsonSerializer.Serialize(request with { StartsAt = startsAt, EndsAt = endsAt }, JsonOptions);
+        return new TemporalNormalizationResult(command with { ArgumentsJson = json }, null);
+    }
+
+    private static TemporalNormalizationResult NormalizeUpdate(
+        ParsedCommand command, DateOnly? date, TimeOnly? time, DateTimeOffset localNow)
+    {
+        var request = JsonSerializer.Deserialize<UpdateCalendarEventCommandArguments>(command.ArgumentsJson, JsonOptions);
+        if (request is null) return new TemporalNormalizationResult(command, null);
+        var (startsAt, endsAt) = NormalizeRange(request.StartsAt, request.EndsAt, date, time, localNow.Offset);
+        var json = JsonSerializer.Serialize(request with { StartsAt = startsAt, EndsAt = endsAt }, JsonOptions);
+        return new TemporalNormalizationResult(command with { ArgumentsJson = json }, null);
+    }
+
+    private static (DateTimeOffset StartsAt, DateTimeOffset EndsAt) NormalizeRange(
+        DateTimeOffset originalStart,
+        DateTimeOffset originalEnd,
+        DateOnly? date,
+        TimeOnly? time,
+        TimeSpan offset)
+    {
+        if (date is null && time is null) return (originalStart, originalEnd);
+        var localOriginal = originalStart.ToOffset(offset);
+        var targetDate = date ?? DateOnly.FromDateTime(localOriginal.Date);
+        var targetTime = time ?? TimeOnly.FromDateTime(localOriginal.DateTime);
+        var startsAt = new DateTimeOffset(targetDate.ToDateTime(targetTime), offset);
+        var duration = originalEnd - originalStart;
+        if (duration <= TimeSpan.Zero || duration > TimeSpan.FromDays(7)) duration = TimeSpan.FromHours(1);
+        return (startsAt, startsAt.Add(duration));
+    }
+
+    private static DateOnly? ResolveRelativeDate(string text, DateTimeOffset localNow)
+    {
+        var today = DateOnly.FromDateTime(localNow.Date);
+        if (text.Contains("day after tomorrow", StringComparison.Ordinal) ||
+            text.Contains("μεθαυριο", StringComparison.Ordinal)) return today.AddDays(2);
+        if (text.Contains("tomorrow", StringComparison.Ordinal) ||
+            text.Contains("αυριο", StringComparison.Ordinal)) return today.AddDays(1);
+        if (text.Contains("today", StringComparison.Ordinal) ||
+            text.Contains("σημερα", StringComparison.Ordinal)) return today;
+
+        foreach (var (name, day) in Weekdays)
+        {
+            if (!WholeWord(name).IsMatch(text)) continue;
+            var daysAhead = ((int)day - (int)localNow.DayOfWeek + 7) % 7;
+            return today.AddDays(daysAhead == 0 ? 7 : daysAhead);
+        }
+        return null;
+    }
+
+    private static TimeOnly? ResolveTime(string text)
+    {
+        var match = TwentyFourHourTime().Match(text);
+        if (match.Success)
+            return new TimeOnly(Parse(match, "hour"), Parse(match, "minute"));
+
+        match = EnglishTime().Match(text);
+        if (match.Success)
+        {
+            var hour = Parse(match, "hour") % 12;
+            if (match.Groups["period"].Value.StartsWith('p')) hour += 12;
+            return new TimeOnly(hour, ParseOptional(match, "minute"));
+        }
+
+        match = GreekTime().Match(text);
+        if (match.Success)
+        {
+            var hour = Parse(match, "hour");
+            var period = match.Groups["period"].Value.Replace(".", string.Empty, StringComparison.Ordinal);
+            if ((period is "απογευμα" or "βραδυ" or "μμ") && hour < 12) hour += 12;
+            if (period == "πμ" && hour == 12) hour = 0;
+            return new TimeOnly(hour, ParseOptional(match, "minute"));
+        }
+
+        if (text.Contains("morning", StringComparison.Ordinal) || text.Contains("πρωι", StringComparison.Ordinal))
+            return new TimeOnly(9, 0);
+        if (text.Contains("noon", StringComparison.Ordinal) || text.Contains("μεσημερι", StringComparison.Ordinal))
+            return new TimeOnly(12, 0);
+        if (text.Contains("afternoon", StringComparison.Ordinal) || text.Contains("απογευμα", StringComparison.Ordinal))
+            return new TimeOnly(15, 0);
+        if (text.Contains("evening", StringComparison.Ordinal) || text.Contains("βραδυ", StringComparison.Ordinal))
+            return new TimeOnly(20, 0);
+        return null;
+    }
+
+    private static int Parse(Match match, string group) => int.Parse(match.Groups[group].Value, CultureInfo.InvariantCulture);
+    private static int ParseOptional(Match match, string group) => match.Groups[group].Success ? Parse(match, group) : 0;
+
+    private static string RemoveDiacritics(string value)
+    {
+        var decomposed = value.Normalize(NormalizationForm.FormD);
+        var builder = new StringBuilder(decomposed.Length);
+        foreach (var character in decomposed)
+            if (CharUnicodeInfo.GetUnicodeCategory(character) != UnicodeCategory.NonSpacingMark)
+                builder.Append(character);
+        return builder.ToString().Normalize(NormalizationForm.FormC);
+    }
+
+    private static Regex WholeWord(string value) => new($@"\b{Regex.Escape(value)}\b", RegexOptions.CultureInvariant);
+
+    [GeneratedRegex(@"(?<!\d)(?<hour>[01]?\d|2[0-3])[:.](?<minute>[0-5]\d)(?!\d)", RegexOptions.CultureInvariant)]
+    private static partial Regex TwentyFourHourTime();
+
+    [GeneratedRegex(@"\b(?:at\s*)?(?<hour>1[0-2]|0?[1-9])(?::(?<minute>[0-5]\d))?\s*(?<period>a\.?m\.?|p\.?m\.?)\b", RegexOptions.CultureInvariant)]
+    private static partial Regex EnglishTime();
+
+    [GeneratedRegex(@"\bστις\s+(?<hour>1[0-2]|0?[1-9])(?::(?<minute>[0-5]\d))?(?:\s*(?:το|τη|την)?\s*(?<period>πρωι|μεσημερι|απογευμα|βραδυ|π\.?μ\.?|μ\.?μ\.?))?", RegexOptions.CultureInvariant)]
+    private static partial Regex GreekTime();
+
+    [GeneratedRegex(@"\b(?:κλεισε|προσθεσε|βαλε|δημιουργησε|προγραμματισε)\b.{0,80}\b(?:ραντεβου|συναντηση|γεγονος)\b|\b(?:ραντεβου|συναντηση|γεγονος)\b.{0,80}\b(?:αυριο|σημερα|μεθαυριο|δευτερα|τριτη|τεταρτη|πεμπτη|παρασκευη|σαββατο|κυριακη)\b", RegexOptions.CultureInvariant)]
+    private static partial Regex GreekCreateIntent();
+
+    [GeneratedRegex(@"\b(?:book|schedule|add|create)\b.{0,80}\b(?:appointment|meeting|event)\b", RegexOptions.CultureInvariant)]
+    private static partial Regex EnglishCreateIntent();
+}
+
+public sealed record TemporalNormalizationResult(ParsedCommand? Command, string? Clarification);

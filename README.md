@@ -230,23 +230,35 @@ deterministic sharing syntax is `share task: <task-id> | <user-id> | edit=true`;
 flag creates a read-only share.
 
 `POST /api/commands/transcribe` accepts an authenticated multipart upload named `audio` (up to
-25 MB). Nevma uses OpenAI for automatic Greek/English transcription and bilingual assistant
-responses. Add these values to the ignored local `.env`, then restart the local stack:
+25 MB). By default Nevma runs its bilingual assistant entirely on self-hosted, open-weight models:
+Qwen3 1.7B through Ollama and the multilingual Whisper small model through whisper.cpp. No external
+AI API key or per-request AI fee is required. In production the models are downloaded once into
+Docker volumes. For local Windows development, install native Ollama so it can use the host GPU,
+run `ollama pull qwen3:1.7b`, and keep whisper.cpp running through Docker:
 
 ```powershell
+docker compose up -d whisper
+ollama pull qwen3:1.7b
+```
+
+```text
 CommandAI__Enabled=true
-CommandAI__ApiKey=<secret>
-CommandAI__Endpoint=https://api.openai.com/v1/responses
-CommandAI__Model=gpt-4o-mini
-CommandAI__TranscriptionEndpoint=https://api.openai.com/v1/audio/transcriptions
-CommandAI__TranscriptionModel=gpt-4o-transcribe
+CommandAI__Provider=Ollama
+CommandAI__Endpoint=http://localhost:11434/api/chat
+CommandAI__Model=qwen3:1.7b
+SpeechToText__Enabled=true
+SpeechToText__Provider=WhisperCpp
+SpeechToText__Endpoint=http://localhost:8084/inference
 ```
 
 The assistant receives the user's local date/time, selected calendar date, and a bounded list of
 their real calendar events. It can answer in Greek or English and propose creating or updating an
 appointment. Every proposal is strictly deserialized and validated again inside Nevma; AI output
 can never bypass authorization, preview, explicit user confirmation, or the ten-year scheduling
-limit. API keys remain on the backend and are never sent to Expo clients.
+limit. The production Compose stack keeps both inference services on its internal network; neither
+model endpoint should be exposed publicly. Qwen3 weights are Apache-2.0 licensed and Whisper is MIT
+licensed. Hosting still consumes the operator's own CPU/GPU resources, but there is no model API
+subscription or usage balance.
 
 ## Gateway and observability
 

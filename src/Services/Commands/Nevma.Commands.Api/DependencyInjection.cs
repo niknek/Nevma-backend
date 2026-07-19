@@ -24,19 +24,42 @@ public static class DependencyInjection
         services.Configure<AiProviderOptions>(configuration.GetSection(AiProviderOptions.SectionName));
         services.Configure<SpeechProviderOptions>(configuration.GetSection(SpeechProviderOptions.SectionName));
         services.AddSingleton<RuleBasedIntentParser>();
+        services.AddSingleton<BilingualTemporalNormalizer>();
         services.AddSingleton<ICommandValidator, CommandValidator>();
         services
             .AddHttpClient<HttpAiProvider>(client => client.Timeout = Timeout.InfiniteTimeSpan)
             .AddNevmaResilience(TimeSpan.FromSeconds(20), TimeSpan.FromSeconds(8));
-        services
-            .AddHttpClient<OpenAiSpeechToTextProvider>(client => client.Timeout = Timeout.InfiniteTimeSpan)
-            .AddNevmaResilience(TimeSpan.FromMinutes(2), TimeSpan.FromSeconds(45));
+        var speechProvider = configuration[$"{SpeechProviderOptions.SectionName}:Provider"] ?? "WhisperCpp";
+        if (speechProvider.Equals("OpenAI", StringComparison.OrdinalIgnoreCase))
+        {
+            services
+                .AddHttpClient<OpenAiSpeechToTextProvider>(client => client.Timeout = Timeout.InfiniteTimeSpan)
+                .AddNevmaResilience(TimeSpan.FromMinutes(2), TimeSpan.FromSeconds(45));
+            services.AddTransient<ISpeechToTextProvider, OpenAiSpeechToTextProvider>();
+        }
+        else
+        {
+            services
+                .AddHttpClient<WhisperCppSpeechToTextProvider>(client => client.Timeout = Timeout.InfiniteTimeSpan)
+                .AddNevmaResilience(TimeSpan.FromMinutes(3), TimeSpan.FromMinutes(2));
+            services.AddTransient<ISpeechToTextProvider, WhisperCppSpeechToTextProvider>();
+        }
         services.AddTransient<IAiProvider, HttpAiProvider>();
-        services
-            .AddHttpClient<OpenAiAssistantProvider>(client => client.Timeout = Timeout.InfiniteTimeSpan)
-            .AddNevmaResilience(TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(20));
-        services.AddTransient<IAiAssistantProvider, OpenAiAssistantProvider>();
-        services.AddTransient<ISpeechToTextProvider, OpenAiSpeechToTextProvider>();
+        var assistantProvider = configuration[$"{AiProviderOptions.SectionName}:Provider"] ?? "Ollama";
+        if (assistantProvider.Equals("OpenAI", StringComparison.OrdinalIgnoreCase))
+        {
+            services
+                .AddHttpClient<OpenAiAssistantProvider>(client => client.Timeout = Timeout.InfiniteTimeSpan)
+                .AddNevmaResilience(TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(20));
+            services.AddTransient<IAiAssistantProvider, OpenAiAssistantProvider>();
+        }
+        else
+        {
+            services
+                .AddHttpClient<OllamaAssistantProvider>(client => client.Timeout = Timeout.InfiniteTimeSpan)
+                .AddNevmaResilience(TimeSpan.FromMinutes(2), TimeSpan.FromSeconds(90));
+            services.AddTransient<IAiAssistantProvider, OllamaAssistantProvider>();
+        }
         services.AddTransient<IIntentParser, HybridIntentParser>();
         services.AddScoped<ICommandExecutor, BackendCommandExecutor>();
         services.AddScoped<CommandService>();

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Nevma.Commands.Api.Application;
 using Nevma.Commands.Api.Domain;
@@ -121,6 +122,7 @@ public sealed class CommandServiceTests
             "\"startsAt\":\"2026-07-16T18:00:00Z\",\"endsAt\":\"2026-07-16T19:00:00Z\"}");
         var service = new AssistantService(
             new FakeAssistantProvider(parsed),
+            new BilingualTemporalNormalizer(),
             new CommandValidator(),
             new EfCommandRepository(context),
             context,
@@ -132,7 +134,48 @@ public sealed class CommandServiceTests
 
         Assert.NotNull(result.Response.ProposedCommand);
         Assert.Equal(CommandStatus.Previewed, result.Response.ProposedCommand.Status);
+        var arguments = JsonSerializer.Deserialize<CreateCalendarEventCommandArguments>(
+            result.Response.ProposedCommand.ArgumentsJson, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        Assert.NotNull(arguments);
+        Assert.Equal(new DateTimeOffset(2026, 7, 16, 18, 0, 0, TimeSpan.Zero), arguments.StartsAt);
         Assert.Equal(1, await context.Commands.CountAsync());
+    }
+
+    [Theory]
+    [InlineData("Book a dentist appointment tomorrow at 6pm", "en", 2026, 7, 16, 18)]
+    [InlineData("Κλείσε οδοντίατρο αύριο στις 6 το απόγευμα", "el", 2026, 7, 16, 18)]
+    public void Temporal_normalizer_resolves_relative_bilingual_dates(
+        string message, string language, int year, int month, int day, int hour)
+    {
+        var proposal = new ParsedCommand(
+            CommandIntent.CreateCalendarEvent,
+            "Create appointment",
+            "{\"title\":\"Dentist\",\"purpose\":null,\"location\":null," +
+            "\"startsAt\":\"2026-07-15T15:00:00Z\",\"endsAt\":\"2026-07-15T16:00:00Z\"}");
+
+        var result = new BilingualTemporalNormalizer().Normalize(message, proposal, Now, language);
+        Assert.NotNull(result.Command);
+        var arguments = JsonSerializer.Deserialize<CreateCalendarEventCommandArguments>(
+            result.Command.ArgumentsJson, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        Assert.NotNull(arguments);
+        Assert.Equal(new DateTimeOffset(year, month, day, hour, 0, 0, TimeSpan.Zero), arguments.StartsAt);
+        Assert.Equal(arguments.StartsAt.AddHours(1), arguments.EndsAt);
+    }
+
+    [Fact]
+    public void Greek_calendar_fallback_requires_a_clear_intent_and_resolves_the_time()
+    {
+        var normalizer = new BilingualTemporalNormalizer();
+        var result = normalizer.TryCreateFallback(
+            "Κλείσε ραντεβού με οδοντίατρο αύριο στις 6 το απόγευμα", Now, "el");
+        var random = normalizer.TryCreateFallback("μοβ κύματα και όμορφα κουμπιά", Now, "el");
+
+        Assert.NotNull(result.Command);
+        Assert.Null(random.Command);
+        var arguments = JsonSerializer.Deserialize<CreateCalendarEventCommandArguments>(
+            result.Command.ArgumentsJson, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        Assert.NotNull(arguments);
+        Assert.Equal(new DateTimeOffset(2026, 7, 16, 18, 0, 0, TimeSpan.Zero), arguments.StartsAt);
     }
 
     private static CommandService CreateService(CommandsDbContext context, FakeExecutor? executor = null) =>
