@@ -110,6 +110,25 @@ public sealed class IdentityApiTests
         Assert.Contains("no-cache", response.Headers.Pragma.ToString(), StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task Development_user_header_can_manage_address_book_contacts()
+    {
+        using var factory = new IdentityApiFactory();
+        using var client = CreateClient(factory);
+        await factory.InitializeDatabaseAsync();
+        client.DefaultRequestHeaders.Add("X-Nevma-User-Id", Guid.NewGuid().ToString());
+
+        var created = await client.PostAsJsonAsync(
+            "/api/address-book/contacts/",
+            new SaveAddressBookContactRequest("Konstantina Nika", "6982125235", "konstantina@example.com", null, "Ερατούς 9", null));
+        var listed = await client.GetFromJsonAsync<AddressBookContactResponse[]>("/api/address-book/contacts/");
+
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var contact = Assert.Single(listed!);
+        Assert.Equal("Konstantina Nika", contact.Name);
+        Assert.Equal("6982125235", contact.Phone);
+    }
+
     private static HttpClient CreateClient(IdentityApiFactory factory) =>
         factory.CreateClient(new WebApplicationFactoryClientOptions
         {
