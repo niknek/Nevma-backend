@@ -41,7 +41,7 @@ public sealed partial class BilingualTemporalNormalizer
         try
         {
             return command.Intent == CommandIntent.CreateCalendarEvent
-                ? NormalizeCreate(command, relativeDate, explicitTime, localNow)
+                ? NormalizeCreate(command, relativeDate, explicitTime, localNow, message, detectedLanguage)
                 : NormalizeUpdate(command, relativeDate, explicitTime, localNow);
         }
         catch (JsonException)
@@ -68,9 +68,7 @@ public sealed partial class BilingualTemporalNormalizer
                 ? "Ποια ακριβώς ημέρα και ώρα θέλεις να γίνει το ραντεβού;"
                 : "What exact date and time should the appointment start?");
 
-        var title = isGreekRequest
-            ? (normalized.Contains("οδοντιατρ", StringComparison.Ordinal) ? "Ραντεβού με οδοντίατρο" : "Ραντεβού")
-            : (normalized.Contains("dentist", StringComparison.Ordinal) ? "Dentist appointment" : "Appointment");
+        var title = ChooseTitle(null, message, detectedLanguage);
         var startsAt = new DateTimeOffset(date.Value.ToDateTime(time.Value), localNow.Offset);
         var arguments = new CreateCalendarEventCommandArguments(
             title, message.Trim(), null, startsAt, startsAt.AddHours(1));
@@ -82,13 +80,51 @@ public sealed partial class BilingualTemporalNormalizer
     }
 
     private static TemporalNormalizationResult NormalizeCreate(
-        ParsedCommand command, DateOnly? date, TimeOnly? time, DateTimeOffset localNow)
+        ParsedCommand command,
+        DateOnly? date,
+        TimeOnly? time,
+        DateTimeOffset localNow,
+        string message,
+        string detectedLanguage)
     {
         var request = JsonSerializer.Deserialize<CreateCalendarEventCommandArguments>(command.ArgumentsJson, JsonOptions);
         if (request is null) return new TemporalNormalizationResult(command, null);
         var (startsAt, endsAt) = NormalizeRange(request.StartsAt, request.EndsAt, date, time, localNow.Offset);
-        var json = JsonSerializer.Serialize(request with { StartsAt = startsAt, EndsAt = endsAt }, JsonOptions);
-        return new TemporalNormalizationResult(command with { ArgumentsJson = json }, null);
+        var title = ChooseTitle(request.Title, message, detectedLanguage);
+        var json = JsonSerializer.Serialize(request with { Title = title, StartsAt = startsAt, EndsAt = endsAt }, JsonOptions);
+        var summary = detectedLanguage == "el" ? $"Δημιουργία: {title}" : $"Create: {title}";
+        return new TemporalNormalizationResult(command with { Summary = summary, ArgumentsJson = json }, null);
+    }
+
+    private static string ChooseTitle(string? proposedTitle, string message, string detectedLanguage)
+    {
+        var normalized = RemoveDiacritics(message).ToLowerInvariant();
+        var isGreek = detectedLanguage == "el" || GreekCharacters().IsMatch(message);
+
+        if (normalized.Contains("οδοντιατρ", StringComparison.Ordinal)) return "Ραντεβού με οδοντίατρο";
+        if (normalized.Contains("dentist", StringComparison.Ordinal)) return "Dentist appointment";
+        if (normalized.Contains("κομμωτηρ", StringComparison.Ordinal)) return "Ραντεβού στο κομμωτήριο";
+        if (normalized.Contains("hairdresser", StringComparison.Ordinal) || normalized.Contains("haircut", StringComparison.Ordinal))
+            return "Hair appointment";
+        if (normalized.Contains("λογιστ", StringComparison.Ordinal)) return "Ραντεβού με λογιστή";
+        if (normalized.Contains("accountant", StringComparison.Ordinal)) return "Meeting with accountant";
+        if (normalized.Contains("γιατρ", StringComparison.Ordinal)) return "Ραντεβού με γιατρό";
+        if (normalized.Contains("doctor", StringComparison.Ordinal)) return "Doctor appointment";
+
+        var match = isGreek ? GreekSubject().Match(message) : EnglishSubject().Match(message);
+        if (match.Success)
+        {
+            var subject = match.Groups["subject"].Value.Trim(' ', '.', ',', ';', ':');
+            if (subject.Length is > 0 and <= 45)
+                return isGreek ? $"Συνάντηση με {subject}" : $"Meeting with {subject}";
+        }
+
+        var cleanProposal = proposedTitle?.Trim();
+        if (!string.IsNullOrWhiteSpace(cleanProposal) && cleanProposal.Length <= 60 &&
+            !TemporalTitleWords().IsMatch(RemoveDiacritics(cleanProposal).ToLowerInvariant()))
+            return cleanProposal;
+
+        return isGreek ? "Ραντεβού" : "Appointment";
     }
 
     private static TemporalNormalizationResult NormalizeUpdate(
@@ -201,6 +237,18 @@ public sealed partial class BilingualTemporalNormalizer
 
     [GeneratedRegex(@"\b(?:book|schedule|add|create)\b.{0,80}\b(?:appointment|meeting|event)\b", RegexOptions.CultureInvariant)]
     private static partial Regex EnglishCreateIntent();
+
+    [GeneratedRegex(@"[\u0370-\u03ff]", RegexOptions.CultureInvariant)]
+    private static partial Regex GreekCharacters();
+
+    [GeneratedRegex(@"(?:ραντεβού|συνάντηση)\s+με\s+(?<subject>.+?)(?=\s+(?:σήμερα|αύριο|μεθαύριο|τη|την|στις|στις|για)\b|$)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex GreekSubject();
+
+    [GeneratedRegex(@"(?:appointment|meeting)\s+with\s+(?<subject>.+?)(?=\s+(?:today|tomorrow|next|on|at|for)\b|$)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex EnglishSubject();
+
+    [GeneratedRegex(@"\b(?:today|tomorrow|next|monday|tuesday|wednesday|thursday|friday|saturday|sunday|σημερα|αυριο|μεθαυριο|δευτερα|τριτη|τεταρτη|πεμπτη|παρασκευη|σαββατο|κυριακη|στις|at)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex TemporalTitleWords();
 }
 
 public sealed record TemporalNormalizationResult(ParsedCommand? Command, string? Clarification);

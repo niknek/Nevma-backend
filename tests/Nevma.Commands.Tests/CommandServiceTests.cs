@@ -178,6 +178,27 @@ public sealed class CommandServiceTests
         Assert.Equal(new DateTimeOffset(2026, 7, 16, 18, 0, 0, TimeSpan.Zero), arguments.StartsAt);
     }
 
+    [Theory]
+    [InlineData("Κλείσε ένα ραντεβού με οδοντίατρο αύριο στις 6 το απόγευμα", "el", "Ραντεβού με οδοντίατρο")]
+    [InlineData("Πρόσθεσε συνάντηση με τη Μαρία αύριο στις 10:00", "el", "Συνάντηση με τη Μαρία")]
+    [InlineData("Schedule a meeting with Maria tomorrow at 10 AM", "en", "Meeting with Maria")]
+    [InlineData("Book a doctor appointment tomorrow at 4 PM", "en", "Doctor appointment")]
+    public void Calendar_titles_describe_the_real_appointment(string message, string language, string expectedTitle)
+    {
+        var proposal = new ParsedCommand(
+            CommandIntent.CreateCalendarEvent,
+            "Unhelpful generated sentence tomorrow",
+            "{\"title\":\"Unhelpful generated sentence tomorrow\",\"purpose\":null,\"location\":null," +
+            "\"startsAt\":\"2026-07-15T15:00:00Z\",\"endsAt\":\"2026-07-15T16:00:00Z\"}");
+
+        var result = new BilingualTemporalNormalizer().Normalize(message, proposal, Now, language);
+        var arguments = JsonSerializer.Deserialize<CreateCalendarEventCommandArguments>(
+            result.Command!.ArgumentsJson, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+        Assert.NotNull(arguments);
+        Assert.Equal(expectedTitle, arguments.Title);
+    }
+
     private static CommandService CreateService(CommandsDbContext context, FakeExecutor? executor = null) =>
         new(new EfCommandRepository(context), new RuleBasedIntentParser(), executor ?? new FakeExecutor(), context, new FixedTimeProvider());
     private static CommandsDbContext CreateContext() => new(new DbContextOptionsBuilder<CommandsDbContext>()
