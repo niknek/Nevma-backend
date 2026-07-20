@@ -37,7 +37,7 @@ public sealed partial class BilingualTemporalNormalizer
         if (relativeDate is not null && explicitTime is null)
             return new TemporalNormalizationResult(null, detectedLanguage == "el"
                 ? "Ποια ακριβώς ώρα θέλεις να γίνει το ραντεβού;"
-                : "What exact time should the appointment start?");
+                : "What exact time should the appointment start?", true);
 
         try
         {
@@ -66,9 +66,25 @@ public sealed partial class BilingualTemporalNormalizer
         var date = ResolveRelativeDate(normalized, localNow);
         var time = ResolveTime(normalized);
         if (date is null || time is null)
+        {
+            var clarification = detectedLanguage == "el"
+                ? date is null && time is null
+                    ? "Ποια ακριβώς ημέρα και ώρα θέλεις να γίνει το ραντεβού;"
+                    : date is null ? "Ποια ακριβώς ημέρα θέλεις να γίνει το ραντεβού;" : "Ποια ακριβώς ώρα θέλεις να γίνει το ραντεβού;"
+                : date is null && time is null
+                    ? "What exact date and time should the appointment start?"
+                    : date is null ? "What exact date should the appointment start?" : "What exact time should the appointment start?";
+            return new TemporalNormalizationResult(null, clarification, true);
+        }
+
+        var unlinkedContacts = ResolveMentionedUnlinkedContacts(message, contacts);
+        if (unlinkedContacts.Count > 0)
+        {
+            var names = string.Join(", ", unlinkedContacts);
             return new TemporalNormalizationResult(null, detectedLanguage == "el"
-                ? "Ποια ακριβώς ημέρα και ώρα θέλεις να γίνει το ραντεβού;"
-                : "What exact date and time should the appointment start?");
+                ? $"Η επαφή {names} δεν έχει ακόμη συνδεδεμένο λογαριασμό Nevma. Για να λάβει notification και να αποδεχτεί το ραντεβού, πρέπει να εγγραφεί με το ίδιο email ή τηλέφωνο."
+                : $"{names} is not linked to a Nevma account yet. They must register with the same email or phone to receive and accept the invitation.");
+        }
 
         var title = ChooseTitle(null, message, detectedLanguage);
         var startsAt = new DateTimeOffset(date.Value.ToDateTime(time.Value), localNow.Offset);
@@ -90,6 +106,15 @@ public sealed partial class BilingualTemporalNormalizer
         string detectedLanguage,
         IReadOnlyCollection<AssistantContact>? contacts)
     {
+        var unlinkedContacts = ResolveMentionedUnlinkedContacts(message, contacts);
+        if (unlinkedContacts.Count > 0)
+        {
+            var names = string.Join(", ", unlinkedContacts);
+            return new TemporalNormalizationResult(null, detectedLanguage == "el"
+                ? $"Η επαφή {names} δεν έχει ακόμη συνδεδεμένο λογαριασμό Nevma. Για να λάβει notification και να αποδεχτεί το ραντεβού, πρέπει να εγγραφεί με το ίδιο email ή τηλέφωνο."
+                : $"{names} is not linked to a Nevma account yet. They must register with the same email or phone to receive and accept the invitation.");
+        }
+
         var request = JsonSerializer.Deserialize<CreateCalendarEventCommandArguments>(command.ArgumentsJson, JsonOptions);
         if (request is null) return new TemporalNormalizationResult(command, null);
         var (startsAt, endsAt) = NormalizeRange(request.StartsAt, request.EndsAt, date, time, localNow.Offset);
@@ -110,6 +135,19 @@ public sealed partial class BilingualTemporalNormalizer
     {
         var normalized = RemoveDiacritics(message).ToLowerInvariant();
         var isGreek = detectedLanguage == "el" || GreekCharacters().IsMatch(message);
+
+        if (normalized.Contains("καφε", StringComparison.Ordinal) || normalized.Contains("coffee", StringComparison.Ordinal))
+        {
+            var coffeeMatch = CoffeeSubject().Match(message);
+            if (coffeeMatch.Success)
+            {
+                var subject = coffeeMatch.Groups["subject"].Value.Trim(' ', '.', ',', ';', ':');
+                if (subject.Length is > 0 and <= 45)
+                    return isGreek ? $"Καφέ με {subject}" : $"Coffee with {subject}";
+            }
+
+            return isGreek ? "Καφέ" : "Coffee";
+        }
 
         if (normalized.Contains("οδοντιατρ", StringComparison.Ordinal)) return "Ραντεβού με οδοντίατρο";
         if (normalized.Contains("dentist", StringComparison.Ordinal)) return "Dentist appointment";
@@ -164,8 +202,35 @@ public sealed partial class BilingualTemporalNormalizer
     {
         if (contacts is null || contacts.Count == 0) return [];
         var normalizedMessage = RemoveDiacritics(message).ToLowerInvariant();
-        var aliases = contacts
-            .Where(contact => contact.UserId != Guid.Empty && !string.IsNullOrWhiteSpace(contact.DisplayName))
+        var transliteratedMessage = TransliterateGreek(normalizedMessage);
+        var aliases = BuildAliases(contacts)
+            .Where(item => item.Contact.UserId.HasValue && item.Contact.UserId.Value != Guid.Empty);
+
+        return aliases
+            .Where(item => MatchesAlias(item.Alias, normalizedMessage, transliteratedMessage))
+            .Select(item => item.Contact.UserId!.Value)
+            .Distinct()
+            .ToArray();
+    }
+
+    private static IReadOnlyCollection<string> ResolveMentionedUnlinkedContacts(
+        string message,
+        IReadOnlyCollection<AssistantContact>? contacts)
+    {
+        if (contacts is null || contacts.Count == 0) return [];
+        var normalizedMessage = RemoveDiacritics(message).ToLowerInvariant();
+        var transliteratedMessage = TransliterateGreek(normalizedMessage);
+        return BuildAliases(contacts)
+            .Where(item => item.Contact.UserId is null && MatchesAlias(item.Alias, normalizedMessage, transliteratedMessage))
+            .Select(item => item.Contact.DisplayName)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static IEnumerable<(string Alias, AssistantContact Contact)> BuildAliases(
+        IReadOnlyCollection<AssistantContact>? contacts) =>
+        (contacts ?? [])
+            .Where(contact => !string.IsNullOrWhiteSpace(contact.DisplayName))
             .SelectMany(contact =>
             {
                 var fullName = RemoveDiacritics(contact.DisplayName).ToLowerInvariant().Trim();
@@ -177,15 +242,26 @@ public sealed partial class BilingualTemporalNormalizer
             })
             .Where(item => item.Alias.Length >= 2)
             .GroupBy(item => item.Alias, StringComparer.Ordinal)
-            .Where(group => group.Select(item => item.Contact.UserId).Distinct().Count() == 1)
+            .Where(group => group.Select(item => item.Contact.ContactId ?? item.Contact.UserId).Distinct().Count() == 1)
             .Select(group => group.First())
             .OrderByDescending(item => item.Alias.Length);
 
-        return aliases
-            .Where(item => WholeWord(item.Alias).IsMatch(normalizedMessage))
-            .Select(item => item.Contact.UserId)
-            .Distinct()
-            .ToArray();
+    private static bool MatchesAlias(string alias, string normalizedMessage, string transliteratedMessage) =>
+        WholeWord(alias).IsMatch(normalizedMessage) || WholeWord(alias).IsMatch(transliteratedMessage);
+
+    private static string TransliterateGreek(string value)
+    {
+        var builder = new StringBuilder(value.Length);
+        foreach (var character in value)
+            builder.Append(character switch
+            {
+                'α' => "a", 'β' => "v", 'γ' => "g", 'δ' => "d", 'ε' => "e", 'ζ' => "z",
+                'η' => "i", 'θ' => "th", 'ι' => "i", 'κ' => "k", 'λ' => "l", 'μ' => "m",
+                'ν' => "n", 'ξ' => "x", 'ο' => "o", 'π' => "p", 'ρ' => "r", 'σ' or 'ς' => "s",
+                'τ' => "t", 'υ' => "i", 'φ' => "f", 'χ' => "ch", 'ψ' => "ps", 'ω' => "o",
+                _ => character.ToString()
+            });
+        return builder.ToString();
     }
 
     private static (DateTimeOffset StartsAt, DateTimeOffset EndsAt) NormalizeRange(
@@ -283,10 +359,10 @@ public sealed partial class BilingualTemporalNormalizer
     [GeneratedRegex(@"\bστις\s+(?<hour>1[0-2]|0?[1-9])(?::(?<minute>[0-5]\d))?(?:\s*(?:το|τη|την)?\s*(?<period>πρωι|μεσημερι|απογευμα|βραδυ|π\.?μ\.?|μ\.?μ\.?))?", RegexOptions.CultureInvariant)]
     private static partial Regex GreekTime();
 
-    [GeneratedRegex(@"\b(?:κλεισε|προσθεσε|βαλε|δημιουργησε|προγραμματισε)\b.{0,80}\b(?:ραντεβου|συναντηση|γεγονος)\b|\b(?:ραντεβου|συναντηση|γεγονος)\b.{0,80}\b(?:αυριο|σημερα|μεθαυριο|δευτερα|τριτη|τεταρτη|πεμπτη|παρασκευη|σαββατο|κυριακη)\b", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"\b(?:κλεισε|προσθεσε|βαλε|δημιουργησε|προγραμματισε)\b.{0,80}\b(?:ραντεβου|συναντηση|γεγονος|καφε)\b|\b(?:ραντεβου|συναντηση|γεγονος|καφε)\b.{0,80}\b(?:αυριο|σημερα|μεθαυριο|δευτερα|τριτη|τεταρτη|πεμπτη|παρασκευη|σαββατο|κυριακη)\b", RegexOptions.CultureInvariant)]
     private static partial Regex GreekCreateIntent();
 
-    [GeneratedRegex(@"\b(?:book|schedule|add|create)\b.{0,80}\b(?:appointment|meeting|event)\b", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"\b(?:book|schedule|add|create|plan)\b.{0,80}\b(?:appointment|meeting|event|coffee)\b", RegexOptions.CultureInvariant)]
     private static partial Regex EnglishCreateIntent();
 
     [GeneratedRegex(@"[\u0370-\u03ff]", RegexOptions.CultureInvariant)]
@@ -298,8 +374,14 @@ public sealed partial class BilingualTemporalNormalizer
     [GeneratedRegex(@"(?:appointment|meeting)\s+with\s+(?<subject>.+?)(?=\s+(?:today|tomorrow|next|on|at|for)\b|$)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex EnglishSubject();
 
+    [GeneratedRegex(@"(?:καφέ|καφε|coffee)\s+(?:με|with)\s+(?:την|τον|τη|το)?\s*(?<subject>.+?)(?=\s+(?:σήμερα|αύριο|μεθαύριο|today|tomorrow|next|on|at|στις|για)\b|[.]|$)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex CoffeeSubject();
+
     [GeneratedRegex(@"\b(?:today|tomorrow|next|monday|tuesday|wednesday|thursday|friday|saturday|sunday|σημερα|αυριο|μεθαυριο|δευτερα|τριτη|τεταρτη|πεμπτη|παρασκευη|σαββατο|κυριακη|στις|at)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex TemporalTitleWords();
 }
 
-public sealed record TemporalNormalizationResult(ParsedCommand? Command, string? Clarification);
+public sealed record TemporalNormalizationResult(
+    ParsedCommand? Command,
+    string? Clarification,
+    bool NeedsMoreInformation = false);

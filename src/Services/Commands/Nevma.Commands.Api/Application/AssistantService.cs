@@ -26,10 +26,11 @@ public sealed class AssistantService(
         var offsetMinutes = Math.Clamp(request.UtcOffsetMinutes ?? 0, -14 * 60, 14 * 60);
         var localNow = timeProvider.GetUtcNow().ToOffset(TimeSpan.FromMinutes(offsetMinutes));
         var result = await provider.RespondAsync(request, localNow, cancellationToken);
-        if (result is AssistantProviderResult.Unavailable unavailable)
-            return new AssistantResult.Unavailable(unavailable.Message);
-
-        var completed = (AssistantProviderResult.Completed)result;
+        var unavailable = result as AssistantProviderResult.Unavailable;
+        var completed = result as AssistantProviderResult.Completed ?? new AssistantProviderResult.Completed(
+            string.Empty,
+            DetectLanguage(request.Message),
+            null);
         CommandResponse? commandResponse = null;
         var proposedCommand = completed.Command;
         string? fallbackReply = null;
@@ -40,7 +41,9 @@ public sealed class AssistantService(
             proposedCommand = fallback.Command;
             if (proposedCommand is null && fallback.Clarification is not null)
                 return new AssistantResult.Completed(new AssistantResponse(
-                    fallback.Clarification, completed.DetectedLanguage, null));
+                    fallback.Clarification, completed.DetectedLanguage, null, fallback.NeedsMoreInformation));
+            if (proposedCommand is null && unavailable is not null)
+                return new AssistantResult.Unavailable(unavailable.Message);
             if (proposedCommand is not null)
                 fallbackReply = completed.DetectedLanguage == "el"
                     ? "Ετοίμασα το ραντεβού. Έλεγξε τα στοιχεία και επιβεβαίωσέ το."
@@ -53,7 +56,7 @@ public sealed class AssistantService(
                 request.Message, proposedCommand, localNow, completed.DetectedLanguage, request.Contacts);
             if (normalization.Command is null)
                 return new AssistantResult.Completed(new AssistantResponse(
-                    normalization.Clarification!, completed.DetectedLanguage, null));
+                    normalization.Clarification!, completed.DetectedLanguage, null, normalization.NeedsMoreInformation));
 
             var validation = validator.Validate(normalization.Command, localNow);
             if (validation is not ParseResult.Parsed parsed)
@@ -81,6 +84,9 @@ public sealed class AssistantService(
             completed.DetectedLanguage,
             commandResponse));
     }
+
+    private static string DetectLanguage(string message) =>
+        message.Any(character => character is >= '\u0370' and <= '\u03ff') ? "el" : "en";
 }
 
 public abstract record AssistantResult

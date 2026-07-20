@@ -141,6 +141,67 @@ public sealed class CommandServiceTests
         Assert.Equal(1, await context.Commands.CountAsync());
     }
 
+    [Fact]
+    public async Task Assistant_uses_calendar_fallback_when_the_local_model_is_unavailable()
+    {
+        await using var context = CreateContext();
+        var service = new AssistantService(
+            new UnavailableAssistantProvider(),
+            new BilingualTemporalNormalizer(),
+            new CommandValidator(),
+            new EfCommandRepository(context),
+            context,
+            new FixedTimeProvider());
+
+        var result = Assert.IsType<AssistantResult.Completed>(await service.RespondAsync(
+            Guid.NewGuid(),
+            new AssistantRequest(
+                "Κλείσε ένα καφέ με την Κωνσταντίνα. Αύριο.",
+                "assistant-fallback",
+                "el-GR",
+                0,
+                null,
+                [],
+                [new AssistantContact(null, "Konstantina Nika", Guid.NewGuid())])));
+
+        Assert.True(result.Response.NeedsMoreInformation);
+        Assert.Contains("ώρα", result.Response.Reply, StringComparison.OrdinalIgnoreCase);
+        Assert.Null(result.Response.ProposedCommand);
+        Assert.Empty(context.Commands);
+    }
+
+    [Fact]
+    public void Voice_command_explains_when_a_mentioned_contact_cannot_receive_an_invitation()
+    {
+        var result = new BilingualTemporalNormalizer().TryCreateFallback(
+            "Κλείσε ένα καφέ με την Κωνσταντίνα αύριο στις 6 το απόγευμα",
+            Now,
+            "el",
+            [new AssistantContact(null, "Konstantina Nika", Guid.NewGuid())]);
+
+        Assert.Null(result.Command);
+        Assert.Contains("λογαριασμό Nevma", result.Clarification, StringComparison.OrdinalIgnoreCase);
+        Assert.False(result.NeedsMoreInformation);
+    }
+
+    [Fact]
+    public void Voice_command_adds_a_linked_contact_to_the_confirmation_preview()
+    {
+        var konstantinaId = Guid.NewGuid();
+        var result = new BilingualTemporalNormalizer().TryCreateFallback(
+            "Κλείσε ένα καφέ με την Κωνσταντίνα αύριο στις 6 το απόγευμα",
+            Now,
+            "el",
+            [new AssistantContact(konstantinaId, "Konstantina Nika", Guid.NewGuid())]);
+
+        Assert.NotNull(result.Command);
+        var arguments = JsonSerializer.Deserialize<CreateCalendarEventCommandArguments>(
+            result.Command.ArgumentsJson, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        Assert.NotNull(arguments);
+        Assert.Equal("Καφέ με Κωνσταντίνα", arguments.Title);
+        Assert.Equal([konstantinaId], arguments.ParticipantIds);
+    }
+
     [Theory]
     [InlineData("Book a dentist appointment tomorrow at 6pm", "en", 2026, 7, 16, 18)]
     [InlineData("Κλείσε οδοντίατρο αύριο στις 6 το απόγευμα", "el", 2026, 7, 16, 18)]
@@ -223,8 +284,8 @@ public sealed class CommandServiceTests
 
         Assert.NotNull(arguments);
         Assert.Equal(2, arguments.ParticipantIds!.Count);
-        Assert.Contains(maria.UserId, arguments.ParticipantIds);
-        Assert.Contains(nikos.UserId, arguments.ParticipantIds);
+        Assert.Contains(maria.UserId!.Value, arguments.ParticipantIds);
+        Assert.Contains(nikos.UserId!.Value, arguments.ParticipantIds);
 
         var ambiguous = new BilingualTemporalNormalizer().Normalize(
             "Schedule a meeting with Alex tomorrow at 10 AM", proposal, Now, "en", [firstAlex, secondAlex]);
@@ -261,5 +322,14 @@ public sealed class CommandServiceTests
             CancellationToken cancellationToken = default) =>
             Task.FromResult<AssistantProviderResult>(new AssistantProviderResult.Completed(
                 "I prepared the calendar change. Please confirm it.", "en", proposal));
+    }
+    private sealed class UnavailableAssistantProvider : IAiAssistantProvider
+    {
+        public Task<AssistantProviderResult> RespondAsync(
+            AssistantRequest request,
+            DateTimeOffset localNow,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<AssistantProviderResult>(new AssistantProviderResult.Unavailable(
+                "The local model returned an invalid response."));
     }
 }

@@ -11,7 +11,7 @@ public sealed record AssistantRequest(
     IReadOnlyCollection<AssistantCalendarEvent> CalendarEvents,
     IReadOnlyCollection<AssistantContact>? Contacts = null);
 
-public sealed record AssistantContact(Guid UserId, string DisplayName);
+public sealed record AssistantContact(Guid? UserId, string DisplayName, Guid? ContactId = null);
 
 public sealed record AssistantCalendarEvent(
     Guid Id,
@@ -24,7 +24,8 @@ public sealed record AssistantCalendarEvent(
 public sealed record AssistantResponse(
     string Reply,
     string DetectedLanguage,
-    CommandResponse? ProposedCommand);
+    CommandResponse? ProposedCommand,
+    bool NeedsMoreInformation = false);
 
 public sealed record SpeechTranscriptionResponse(string Transcript, double? Confidence);
 
