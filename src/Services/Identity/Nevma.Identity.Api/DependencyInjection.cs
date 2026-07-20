@@ -11,6 +11,8 @@ using Nevma.Identity.Api.Application.Sessions;
 using Nevma.Identity.Api.Infrastructure.Sessions;
 using Nevma.Identity.Api.Application.Security;
 using Nevma.Identity.Api.Infrastructure.Security;
+using Nevma.Identity.Api.Application.AddressBook;
+using Nevma.Identity.Api.Infrastructure.AddressBook;
 using Nevma.ServiceDefaults.Extensions;
 
 namespace Nevma.Identity.Api;
@@ -36,6 +38,8 @@ public static class DependencyInjection
         services.AddScoped<IIdentityUnitOfWork>(provider => provider.GetRequiredService<IdentityDbContext>());
         services.AddScoped<IContactConnectionRepository, EfContactConnectionRepository>();
         services.AddScoped<ContactConnectionService>();
+        services.AddScoped<AddressBookService>();
+        services.AddScoped<IAddressBookRepository, EfAddressBookRepository>();
         services.AddScoped<IUserRepository, EfUserRepository>();
         services.AddScoped<IUserPrivacyRepository, EfUserPrivacyRepository>();
         services.AddScoped<UserService>();
