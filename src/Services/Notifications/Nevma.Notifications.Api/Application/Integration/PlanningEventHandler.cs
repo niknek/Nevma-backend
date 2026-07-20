@@ -28,15 +28,18 @@ public sealed class PlanningEventHandler(
             throw new InvalidDataException("Meeting participants must be different users.");
 
         var now = timeProvider.GetUtcNow();
-        var title = GetPrivacySafeTitle(integrationEvent.Status);
+        var (title, body) = GetPrivacySafeContent(integrationEvent.Status);
         var created = new List<Notification>();
-        foreach (var userId in new[] { integrationEvent.OrganizerId, integrationEvent.InviteeId }.Distinct())
+        var recipients = integrationEvent.Status == MeetingInvitationStatus.Pending
+            ? new[] { integrationEvent.InviteeId }
+            : new[] { integrationEvent.OrganizerId, integrationEvent.InviteeId };
+        foreach (var userId in recipients.Distinct())
         {
             var notification = Notification.Create(
                 userId,
                 "meeting-invitation.changed",
                 title,
-                "Open Nevma to review this update.",
+                body,
                 now);
             await notificationRepository.AddAsync(notification, cancellationToken);
             created.Add(notification);
@@ -130,15 +133,15 @@ public sealed class PlanningEventHandler(
         }
     }
 
-    private static string GetPrivacySafeTitle(MeetingInvitationStatus status) => status switch
+    private static (string Title, string Body) GetPrivacySafeContent(MeetingInvitationStatus status) => status switch
     {
-        MeetingInvitationStatus.Pending => "New meeting request",
-        MeetingInvitationStatus.Accepted => "Meeting updated",
-        MeetingInvitationStatus.Declined => "Meeting response",
-        MeetingInvitationStatus.CounterProposed => "Meeting change proposed",
-        MeetingInvitationStatus.RescheduleProposed => "Meeting change proposed",
-        MeetingInvitationStatus.Cancelled => "Meeting cancelled",
-        _ => "Meeting update"
+        MeetingInvitationStatus.Pending => ("New meeting invitation", "Do you accept this meeting? Open Nevma to respond."),
+        MeetingInvitationStatus.Accepted => ("Meeting accepted", "A participant accepted the meeting."),
+        MeetingInvitationStatus.Declined => ("Meeting declined", "A participant declined the meeting."),
+        MeetingInvitationStatus.CounterProposed => ("Meeting change proposed", "Open Nevma to review the proposed change."),
+        MeetingInvitationStatus.RescheduleProposed => ("Meeting change proposed", "Open Nevma to review the proposed change."),
+        MeetingInvitationStatus.Cancelled => ("Meeting cancelled", "Open Nevma to review this update."),
+        _ => ("Meeting update", "Open Nevma to review this update.")
     };
 }
 

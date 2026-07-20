@@ -62,6 +62,19 @@ public sealed class ContactConnectionService(
         return results.Select(ToResponse).ToArray();
     }
 
+    public async Task<IReadOnlyList<ContactSummary>> ListContactsAsync(
+        Guid userId,
+        CancellationToken cancellationToken = default)
+    {
+        var accepted = await connections.ListForUserAsync(userId, DomainStatus.Accepted, cancellationToken);
+        var contactIds = accepted
+            .Select(connection => connection.RequesterId == userId ? connection.AddresseeId : connection.RequesterId)
+            .Distinct()
+            .ToArray();
+        var profiles = await users.GetByIdsAsync(contactIds, cancellationToken);
+        return profiles.Select(user => new ContactSummary(user.Id, user.DisplayName, user.AvatarUrl)).ToArray();
+    }
+
     private async Task<Result<ContactConnectionResponse>> DecideAsync(
         Guid connectionId,
         Guid actorId,

@@ -87,6 +87,10 @@ namespace Nevma.Planning.Api.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.PrimitiveCollection<Guid[]>("AcceptedParticipantIds")
+                        .IsRequired()
+                        .HasColumnType("uuid[]");
+
                     b.Property<DateTimeOffset>("EndsAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -94,12 +98,19 @@ namespace Nevma.Planning.Api.Infrastructure.Persistence.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
+                    b.PrimitiveCollection<Guid[]>("ParticipantIds")
+                        .IsRequired()
+                        .HasColumnType("uuid[]");
+
                     b.Property<string>("Purpose")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
 
                     b.Property<DateTimeOffset>("StartsAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Title")
                         .IsRequired()
@@ -113,6 +124,10 @@ namespace Nevma.Planning.Api.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ParticipantIds");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("ParticipantIds"), "gin");
 
                     b.HasIndex("UserId", "StartsAt");
 

@@ -23,6 +23,8 @@ internal static class AssistantProtocol
         The action.arguments value is a JSON object, never an escaped JSON string.
         For CreateCalendarEvent set id to null and populate title, purpose, location, startsAt, endsAt.
         For UpdateCalendarEvent populate id, title, purpose, location, startsAt, endsAt.
+        participantIds may contain only user IDs from the supplied contacts whose display names the user explicitly
+        mentions. Never invent an ID and never include a contact based only on a similar name.
         Return only the JSON object required by the supplied schema.
         """;
 
@@ -32,7 +34,8 @@ internal static class AssistantProtocol
         localNow,
         request.Locale,
         request.SelectedDate,
-        calendarEvents = request.CalendarEvents
+        calendarEvents = request.CalendarEvents,
+        contacts = request.Contacts ?? []
     };
 
     internal static object Schema => new
@@ -64,9 +67,14 @@ internal static class AssistantProtocol
                                     purpose = NullableString(),
                                     location = NullableString(),
                                     startsAt = NullableString(),
-                                    endsAt = NullableString()
+                                    endsAt = NullableString(),
+                                    participantIds = new
+                                    {
+                                        type = "array",
+                                        items = new { type = "string" }
+                                    }
                                 },
-                                required = new[] { "id", "title", "purpose", "location", "startsAt", "endsAt" },
+                                required = new[] { "id", "title", "purpose", "location", "startsAt", "endsAt", "participantIds" },
                                 additionalProperties = false
                             }
                         },
@@ -105,7 +113,8 @@ internal static class AssistantProtocol
                     arguments.Purpose,
                     arguments.Location,
                     arguments.StartsAt,
-                    arguments.EndsAt
+                    arguments.EndsAt,
+                    arguments.ParticipantIds
                 }, JsonOptions)
                 : JsonSerializer.Serialize(new
                 {
@@ -114,7 +123,8 @@ internal static class AssistantProtocol
                     arguments.Purpose,
                     arguments.Location,
                     arguments.StartsAt,
-                    arguments.EndsAt
+                    arguments.EndsAt,
+                    arguments.ParticipantIds
                 }, JsonOptions);
             command = new ParsedCommand(intent, answer.Action.Summary, argumentsJson);
         }
@@ -135,5 +145,6 @@ internal static class AssistantProtocol
         string? Purpose,
         string? Location,
         string? StartsAt,
-        string? EndsAt);
+        string? EndsAt,
+        IReadOnlyCollection<Guid>? ParticipantIds);
 }

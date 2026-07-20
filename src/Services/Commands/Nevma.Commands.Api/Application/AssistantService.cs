@@ -36,7 +36,7 @@ public sealed class AssistantService(
         if (proposedCommand is null)
         {
             var fallback = temporalNormalizer.TryCreateFallback(
-                request.Message, localNow, completed.DetectedLanguage);
+                request.Message, localNow, completed.DetectedLanguage, request.Contacts);
             proposedCommand = fallback.Command;
             if (proposedCommand is null && fallback.Clarification is not null)
                 return new AssistantResult.Completed(new AssistantResponse(
@@ -50,7 +50,7 @@ public sealed class AssistantService(
         if (proposedCommand is not null)
         {
             var normalization = temporalNormalizer.Normalize(
-                request.Message, proposedCommand, localNow, completed.DetectedLanguage);
+                request.Message, proposedCommand, localNow, completed.DetectedLanguage, request.Contacts);
             if (normalization.Command is null)
                 return new AssistantResult.Completed(new AssistantResponse(
                     normalization.Clarification!, completed.DetectedLanguage, null));

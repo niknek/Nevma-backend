@@ -25,7 +25,8 @@ public sealed partial class BilingualTemporalNormalizer
         string message,
         ParsedCommand command,
         DateTimeOffset localNow,
-        string detectedLanguage)
+        string detectedLanguage,
+        IReadOnlyCollection<AssistantContact>? contacts = null)
     {
         if (command.Intent is not (CommandIntent.CreateCalendarEvent or CommandIntent.UpdateCalendarEvent))
             return new TemporalNormalizationResult(command, null);
@@ -41,8 +42,8 @@ public sealed partial class BilingualTemporalNormalizer
         try
         {
             return command.Intent == CommandIntent.CreateCalendarEvent
-                ? NormalizeCreate(command, relativeDate, explicitTime, localNow, message, detectedLanguage)
-                : NormalizeUpdate(command, relativeDate, explicitTime, localNow);
+                ? NormalizeCreate(command, relativeDate, explicitTime, localNow, message, detectedLanguage, contacts)
+                : NormalizeUpdate(command, relativeDate, explicitTime, localNow, message, contacts);
         }
         catch (JsonException)
         {
@@ -53,7 +54,8 @@ public sealed partial class BilingualTemporalNormalizer
     public TemporalNormalizationResult TryCreateFallback(
         string message,
         DateTimeOffset localNow,
-        string detectedLanguage)
+        string detectedLanguage,
+        IReadOnlyCollection<AssistantContact>? contacts = null)
     {
         var normalized = RemoveDiacritics(message).ToLowerInvariant();
         var isGreekRequest = GreekCreateIntent().IsMatch(normalized);
@@ -71,7 +73,7 @@ public sealed partial class BilingualTemporalNormalizer
         var title = ChooseTitle(null, message, detectedLanguage);
         var startsAt = new DateTimeOffset(date.Value.ToDateTime(time.Value), localNow.Offset);
         var arguments = new CreateCalendarEventCommandArguments(
-            title, message.Trim(), null, startsAt, startsAt.AddHours(1));
+            title, message.Trim(), null, startsAt, startsAt.AddHours(1), ResolveParticipantIds(message, contacts));
         var command = new ParsedCommand(
             CommandIntent.CreateCalendarEvent,
             detectedLanguage == "el" ? $"Δημιουργία: {title}" : $"Create: {title}",
@@ -85,13 +87,21 @@ public sealed partial class BilingualTemporalNormalizer
         TimeOnly? time,
         DateTimeOffset localNow,
         string message,
-        string detectedLanguage)
+        string detectedLanguage,
+        IReadOnlyCollection<AssistantContact>? contacts)
     {
         var request = JsonSerializer.Deserialize<CreateCalendarEventCommandArguments>(command.ArgumentsJson, JsonOptions);
         if (request is null) return new TemporalNormalizationResult(command, null);
         var (startsAt, endsAt) = NormalizeRange(request.StartsAt, request.EndsAt, date, time, localNow.Offset);
         var title = ChooseTitle(request.Title, message, detectedLanguage);
-        var json = JsonSerializer.Serialize(request with { Title = title, StartsAt = startsAt, EndsAt = endsAt }, JsonOptions);
+        var participants = ResolveParticipantIds(message, contacts);
+        var json = JsonSerializer.Serialize(request with
+        {
+            Title = title,
+            StartsAt = startsAt,
+            EndsAt = endsAt,
+            ParticipantIds = participants.Count > 0 ? participants : request.ParticipantIds
+        }, JsonOptions);
         var summary = detectedLanguage == "el" ? $"Δημιουργία: {title}" : $"Create: {title}";
         return new TemporalNormalizationResult(command with { Summary = summary, ArgumentsJson = json }, null);
     }
@@ -128,13 +138,54 @@ public sealed partial class BilingualTemporalNormalizer
     }
 
     private static TemporalNormalizationResult NormalizeUpdate(
-        ParsedCommand command, DateOnly? date, TimeOnly? time, DateTimeOffset localNow)
+        ParsedCommand command,
+        DateOnly? date,
+        TimeOnly? time,
+        DateTimeOffset localNow,
+        string message,
+        IReadOnlyCollection<AssistantContact>? contacts)
     {
         var request = JsonSerializer.Deserialize<UpdateCalendarEventCommandArguments>(command.ArgumentsJson, JsonOptions);
         if (request is null) return new TemporalNormalizationResult(command, null);
         var (startsAt, endsAt) = NormalizeRange(request.StartsAt, request.EndsAt, date, time, localNow.Offset);
-        var json = JsonSerializer.Serialize(request with { StartsAt = startsAt, EndsAt = endsAt }, JsonOptions);
+        var participants = ResolveParticipantIds(message, contacts);
+        var json = JsonSerializer.Serialize(request with
+        {
+            StartsAt = startsAt,
+            EndsAt = endsAt,
+            ParticipantIds = participants.Count > 0 ? participants : request.ParticipantIds
+        }, JsonOptions);
         return new TemporalNormalizationResult(command with { ArgumentsJson = json }, null);
+    }
+
+    private static IReadOnlyCollection<Guid> ResolveParticipantIds(
+        string message,
+        IReadOnlyCollection<AssistantContact>? contacts)
+    {
+        if (contacts is null || contacts.Count == 0) return [];
+        var normalizedMessage = RemoveDiacritics(message).ToLowerInvariant();
+        var aliases = contacts
+            .Where(contact => contact.UserId != Guid.Empty && !string.IsNullOrWhiteSpace(contact.DisplayName))
+            .SelectMany(contact =>
+            {
+                var fullName = RemoveDiacritics(contact.DisplayName).ToLowerInvariant().Trim();
+                var firstName = fullName.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+                var values = new HashSet<string>(StringComparer.Ordinal) { fullName, firstName ?? fullName };
+                if (firstName is { Length: > 3 } && (firstName.EndsWith('ς') || firstName.EndsWith('σ')))
+                    values.Add(firstName[..^1]);
+                return values.Select(alias => (Alias: alias, Contact: contact));
+            })
+            .Where(item => item.Alias.Length >= 2)
+            .GroupBy(item => item.Alias, StringComparer.Ordinal)
+            .Where(group => group.Select(item => item.Contact.UserId).Distinct().Count() == 1)
+            .Select(group => group.First())
+            .OrderByDescending(item => item.Alias.Length);
+
+        return aliases
+            .Where(item => WholeWord(item.Alias).IsMatch(normalizedMessage))
+            .Select(item => item.Contact.UserId)
+            .Distinct()
+            .ToArray();
     }
 
     private static (DateTimeOffset StartsAt, DateTimeOffset EndsAt) NormalizeRange(

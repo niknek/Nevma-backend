@@ -91,7 +91,8 @@ public sealed class CommandValidator : ICommandValidator
     {
         var request = JsonSerializer.Deserialize<CreateCalendarEventCommandArguments>(command.ArgumentsJson, JsonOptions);
         return request is not null && ValidCalendarValues(
-            request.Title, request.Purpose, request.Location, request.StartsAt, request.EndsAt, now)
+            request.Title, request.Purpose, request.Location, request.StartsAt, request.EndsAt, now) &&
+            ValidParticipants(request.ParticipantIds)
             ? new ParseResult.Parsed(command)
             : new ParseResult.Invalid("Calendar event arguments are invalid or outside the supported limits.");
     }
@@ -100,7 +101,8 @@ public sealed class CommandValidator : ICommandValidator
     {
         var request = JsonSerializer.Deserialize<UpdateCalendarEventCommandArguments>(command.ArgumentsJson, JsonOptions);
         return request is not null && request.Id != Guid.Empty && ValidCalendarValues(
-            request.Title, request.Purpose, request.Location, request.StartsAt, request.EndsAt, now)
+            request.Title, request.Purpose, request.Location, request.StartsAt, request.EndsAt, now) &&
+            ValidParticipants(request.ParticipantIds)
             ? new ParseResult.Parsed(command)
             : new ParseResult.Invalid("Calendar event update arguments are invalid or outside the supported limits.");
     }
@@ -113,4 +115,9 @@ public sealed class CommandValidator : ICommandValidator
         (location is null || location.Length <= 300) &&
         startsAt >= now.AddMinutes(-1) && startsAt <= now.AddYears(10) &&
         endsAt > startsAt && endsAt - startsAt <= TimeSpan.FromDays(7);
+
+    private static bool ValidParticipants(IReadOnlyCollection<Guid>? participantIds) =>
+        participantIds is null ||
+        (participantIds.Count <= 50 && participantIds.All(id => id != Guid.Empty) &&
+         participantIds.Distinct().Count() == participantIds.Count);
 }

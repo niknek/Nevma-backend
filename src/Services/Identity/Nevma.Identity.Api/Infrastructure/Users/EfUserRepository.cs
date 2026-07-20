@@ -11,6 +11,15 @@ public sealed class EfUserRepository(IdentityDbContext dbContext) : IUserReposit
         dbContext.Profiles
             .SingleOrDefaultAsync(user => user.Id == id, cancellationToken);
 
+    public async Task<IReadOnlyList<User>> GetByIdsAsync(
+        IReadOnlyCollection<Guid> ids,
+        CancellationToken cancellationToken = default) =>
+        await dbContext.Profiles
+            .AsNoTracking()
+            .Where(user => ids.Contains(user.Id))
+            .OrderBy(user => user.DisplayName)
+            .ToListAsync(cancellationToken);
+
     public async Task AddAsync(User user, CancellationToken cancellationToken = default) =>
         await dbContext.Profiles.AddAsync(user, cancellationToken);
 }

@@ -8,7 +8,10 @@ public sealed record AssistantRequest(
     string? Locale,
     int? UtcOffsetMinutes,
     string? SelectedDate,
-    IReadOnlyCollection<AssistantCalendarEvent> CalendarEvents);
+    IReadOnlyCollection<AssistantCalendarEvent> CalendarEvents,
+    IReadOnlyCollection<AssistantContact>? Contacts = null);
+
+public sealed record AssistantContact(Guid UserId, string DisplayName);
 
 public sealed record AssistantCalendarEvent(
     Guid Id,

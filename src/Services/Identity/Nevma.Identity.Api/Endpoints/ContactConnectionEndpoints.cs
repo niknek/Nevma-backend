@@ -66,6 +66,16 @@ public static class ContactConnectionEndpoints
             return Results.Ok(await service.ListAsync(userId, status, cancellationToken));
         });
 
+        connections.MapGet("/contacts", async (
+            ClaimsPrincipal principal,
+            ContactConnectionService service,
+            CancellationToken cancellationToken) =>
+        {
+            if (!TryGetUserId(principal, out var userId))
+                return Results.Unauthorized();
+            return Results.Ok(await service.ListContactsAsync(userId, cancellationToken));
+        });
+
         return endpoints;
     }
 

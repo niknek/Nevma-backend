@@ -62,6 +62,29 @@ public sealed class ContactConnectionTests
         Assert.Equal(ContractStatus.Accepted, accepted.Value.Status);
     }
 
+    [Fact]
+    public async Task Contact_picker_returns_only_accepted_profiles()
+    {
+        await using var context = CreateContext();
+        var requester = User.Create(Guid.NewGuid(), "Requester", null, DateTimeOffset.UtcNow);
+        var acceptedContact = User.Create(Guid.NewGuid(), "Maria Papadopoulou", "https://example.test/maria.png", DateTimeOffset.UtcNow);
+        var pendingContact = User.Create(Guid.NewGuid(), "Nikos Georgiou", null, DateTimeOffset.UtcNow);
+        context.Profiles.AddRange(requester, acceptedContact, pendingContact);
+        await context.SaveChangesAsync();
+        var service = CreateService(context);
+
+        var acceptedRequest = await service.RequestAsync(requester.Id, new CreateContactConnectionRequest(acceptedContact.Id));
+        await service.AcceptAsync(acceptedRequest.Value.Id, acceptedContact.Id);
+        await service.RequestAsync(requester.Id, new CreateContactConnectionRequest(pendingContact.Id));
+
+        var contacts = await service.ListContactsAsync(requester.Id);
+
+        var contact = Assert.Single(contacts);
+        Assert.Equal(acceptedContact.Id, contact.UserId);
+        Assert.Equal("Maria Papadopoulou", contact.DisplayName);
+        Assert.Equal("https://example.test/maria.png", contact.AvatarUrl);
+    }
+
     private static ContactConnectionService CreateService(IdentityDbContext context) =>
         new(
             new EfContactConnectionRepository(context),

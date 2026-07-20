@@ -66,11 +66,13 @@ public sealed record CreateCalendarEventCommandArguments(
     string? Purpose,
     string? Location,
     DateTimeOffset StartsAt,
-    DateTimeOffset EndsAt);
+    DateTimeOffset EndsAt,
+    IReadOnlyCollection<Guid>? ParticipantIds = null);
 public sealed record UpdateCalendarEventCommandArguments(
     Guid Id,
     string Title,
     string? Purpose,
     string? Location,
     DateTimeOffset StartsAt,
-    DateTimeOffset EndsAt);
+    DateTimeOffset EndsAt,
+    IReadOnlyCollection<Guid>? ParticipantIds = null);

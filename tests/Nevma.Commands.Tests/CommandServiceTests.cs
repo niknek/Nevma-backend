@@ -199,6 +199,40 @@ public sealed class CommandServiceTests
         Assert.Equal(expectedTitle, arguments.Title);
     }
 
+    [Fact]
+    public void Voice_command_resolves_only_unambiguous_real_contacts()
+    {
+        var maria = new AssistantContact(Guid.NewGuid(), "Μαρία Παππά");
+        var nikos = new AssistantContact(Guid.NewGuid(), "Νίκος Κωνσταντίνου");
+        var firstAlex = new AssistantContact(Guid.NewGuid(), "Alex Brown");
+        var secondAlex = new AssistantContact(Guid.NewGuid(), "Alex Green");
+        var proposal = new ParsedCommand(
+            CommandIntent.CreateCalendarEvent,
+            "Create meeting",
+            "{\"title\":\"Meeting\",\"purpose\":null,\"location\":null," +
+            "\"startsAt\":\"2026-07-16T10:00:00Z\",\"endsAt\":\"2026-07-16T11:00:00Z\",\"participantIds\":[]}");
+
+        var result = new BilingualTemporalNormalizer().Normalize(
+            "Πρόσθεσε συνάντηση με τη Μαρία και τον Νίκο αύριο στις 10:00",
+            proposal,
+            Now,
+            "el",
+            [maria, nikos, firstAlex, secondAlex]);
+        var arguments = JsonSerializer.Deserialize<CreateCalendarEventCommandArguments>(
+            result.Command!.ArgumentsJson, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+        Assert.NotNull(arguments);
+        Assert.Equal(2, arguments.ParticipantIds!.Count);
+        Assert.Contains(maria.UserId, arguments.ParticipantIds);
+        Assert.Contains(nikos.UserId, arguments.ParticipantIds);
+
+        var ambiguous = new BilingualTemporalNormalizer().Normalize(
+            "Schedule a meeting with Alex tomorrow at 10 AM", proposal, Now, "en", [firstAlex, secondAlex]);
+        var ambiguousArguments = JsonSerializer.Deserialize<CreateCalendarEventCommandArguments>(
+            ambiguous.Command!.ArgumentsJson, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        Assert.Empty(ambiguousArguments!.ParticipantIds!);
+    }
+
     private static CommandService CreateService(CommandsDbContext context, FakeExecutor? executor = null) =>
         new(new EfCommandRepository(context), new RuleBasedIntentParser(), executor ?? new FakeExecutor(), context, new FixedTimeProvider());
     private static CommandsDbContext CreateContext() => new(new DbContextOptionsBuilder<CommandsDbContext>()

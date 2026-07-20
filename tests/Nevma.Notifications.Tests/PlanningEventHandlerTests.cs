@@ -17,7 +17,7 @@ public sealed class PlanningEventHandlerTests
     private static readonly DateTimeOffset Now = new(2026, 7, 14, 12, 0, 0, TimeSpan.Zero);
 
     [Fact]
-    public async Task Meeting_event_creates_one_privacy_safe_notification_per_participant()
+    public async Task Pending_meeting_event_notifies_the_invitee_with_an_acceptance_prompt()
     {
         await using var context = CreateContext();
         var livePublisher = new RecordingLivePublisher();
@@ -44,17 +44,18 @@ public sealed class PlanningEventHandlerTests
 
         Assert.Equal(PlanningEventHandleResult.Processed, result);
         var notifications = await context.Notifications.ToListAsync();
-        Assert.Equal(2, notifications.Count);
+        Assert.Single(notifications);
         Assert.All(notifications, notification =>
         {
-            Assert.Equal("New meeting request", notification.Title);
-            Assert.Equal("Open Nevma to review this update.", notification.Body);
+            Assert.Equal(integrationEvent.InviteeId, notification.UserId);
+            Assert.Equal("New meeting invitation", notification.Title);
+            Assert.Equal("Do you accept this meeting? Open Nevma to respond.", notification.Body);
             Assert.DoesNotContain(integrationEvent.Title, notification.Body, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain(integrationEvent.Location!, notification.Body, StringComparison.OrdinalIgnoreCase);
         });
         Assert.Equal(1, await context.InboxMessages.CountAsync());
-        Assert.Equal(2, await context.DeliveryAttempts.CountAsync());
-        Assert.Equal(2, livePublisher.Notifications.Count);
+        Assert.Equal(1, await context.DeliveryAttempts.CountAsync());
+        Assert.Single(livePublisher.Notifications);
     }
 
     [Fact]
@@ -68,7 +69,7 @@ public sealed class PlanningEventHandlerTests
         var duplicate = await handler.HandleAsync(integrationEvent);
 
         Assert.Equal(PlanningEventHandleResult.AlreadyProcessed, duplicate);
-        Assert.Equal(2, await context.Notifications.CountAsync());
+        Assert.Equal(1, await context.Notifications.CountAsync());
         Assert.Equal(1, await context.InboxMessages.CountAsync());
     }
 
