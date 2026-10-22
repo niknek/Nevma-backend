@@ -71,6 +71,26 @@ public static class PersonalCalendarEndpoints
             await db.SaveChangesAsync(ct);
             return Results.Ok(item);
         });
+        group.MapPost("/{id:guid}/cancel", async (Guid id, CancelPersonalEventRequest request, HttpContext context, PlanningDbContext db, IPlanningEventOutbox outbox, TimeProvider clock, CancellationToken ct) =>
+        {
+            if (!TryUser(context, out var userId)) return Results.Unauthorized();
+            var item = await db.PersonalCalendarEvents.SingleOrDefaultAsync(x => x.Id == id && x.UserId == userId, ct);
+            if (item is null) return Results.NotFound();
+            var now = clock.GetUtcNow();
+            var outcome = item.Cancel(request.Reason, now);
+            if (outcome == ManualCancellationOutcome.InvalidReason)
+                return Results.ValidationProblem(new Dictionary<string, string[]> { ["reason"] = ["A cancellation reason of up to 500 characters is required."] });
+            if (outcome == ManualCancellationOutcome.AppointmentStarted)
+                return Results.Conflict(new { message = "An appointment that has already started cannot be cancelled." });
+            if (outcome == ManualCancellationOutcome.AlreadyHandled)
+                return Results.Conflict(new { message = "Appointment has already been handled." });
+            outbox.Add(new CalendarEventExpiredIntegrationEvent(
+                Guid.NewGuid(), item.Id,
+                new[] { item.UserId }.Concat(item.ParticipantIds).Distinct().ToArray(),
+                item.Title, item.StartsAt, item.CancellationReason!, now));
+            await db.SaveChangesAsync(ct);
+            return Results.Ok(item);
+        });
         return endpoints;
     }
 
@@ -103,3 +123,5 @@ public sealed record PersonalEventRequest(
     DateTimeOffset StartsAt,
     DateTimeOffset EndsAt,
     IReadOnlyCollection<Guid>? ParticipantIds = null);
+
+public sealed record CancelPersonalEventRequest(string Reason);

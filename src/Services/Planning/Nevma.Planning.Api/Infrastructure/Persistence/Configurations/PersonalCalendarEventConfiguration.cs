@@ -13,6 +13,7 @@ public sealed class PersonalCalendarEventConfiguration : IEntityTypeConfiguratio
         builder.Property(x => x.Title).HasMaxLength(200).IsRequired();
         builder.Property(x => x.Purpose).HasMaxLength(1000);
         builder.Property(x => x.Location).HasMaxLength(500);
+        builder.Property(x => x.CancellationReason).HasMaxLength(500);
         builder.Property(x => x.ParticipantIds).HasColumnType("uuid[]");
         builder.Property(x => x.AcceptedParticipantIds).HasColumnType("uuid[]");
         builder.Property(x => x.ReminderDispatchedAt);

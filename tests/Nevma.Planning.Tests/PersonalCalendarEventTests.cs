@@ -50,4 +50,28 @@ public sealed class PersonalCalendarEventTests
         Assert.True(appointment.CancelIfExpired(Now.AddMinutes(10)));
         Assert.Equal(PersonalCalendarEventStatus.Cancelled, appointment.Status);
     }
+
+    [Fact]
+    public void A_future_appointment_can_be_cancelled_with_a_reason()
+    {
+        var appointment = PersonalCalendarEvent.Create(
+            Guid.NewGuid(), "Coffee", null, null, Now.AddHours(1), Now.AddHours(2),
+            [Guid.NewGuid()], Now);
+
+        var outcome = appointment.Cancel("Plans changed", Now.AddMinutes(1));
+
+        Assert.Equal(ManualCancellationOutcome.Updated, outcome);
+        Assert.Equal(PersonalCalendarEventStatus.Cancelled, appointment.Status);
+        Assert.Equal("Plans changed", appointment.CancellationReason);
+    }
+
+    [Fact]
+    public void A_started_appointment_cannot_be_cancelled_manually()
+    {
+        var appointment = PersonalCalendarEvent.Create(
+            Guid.NewGuid(), "Coffee", null, null, Now.AddMinutes(10), Now.AddHours(1),
+            null, Now);
+
+        Assert.Equal(ManualCancellationOutcome.AppointmentStarted, appointment.Cancel("Too late", Now.AddMinutes(10)));
+    }
 }

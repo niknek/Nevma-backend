@@ -40,6 +40,7 @@ public sealed record CalendarEventExpiredIntegrationEvent(
     IReadOnlyCollection<Guid> UserIds,
     string Title,
     DateTimeOffset StartsAt,
+    string Reason,
     DateTimeOffset OccurredAt);
 
 public static class PlanningIntegrationEventTypes

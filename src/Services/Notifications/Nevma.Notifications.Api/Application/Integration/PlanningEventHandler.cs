@@ -160,7 +160,7 @@ public sealed class PlanningEventHandler(
                 userId,
                 "calendar.cancelled",
                 "Appointment cancelled",
-                $"{integrationEvent.Title} was cancelled because it was not confirmed before its start time.",
+                $"{integrationEvent.Title} was cancelled. Reason: {integrationEvent.Reason}",
                 now);
             await notificationRepository.AddAsync(notification, cancellationToken);
             created.Add(notification);

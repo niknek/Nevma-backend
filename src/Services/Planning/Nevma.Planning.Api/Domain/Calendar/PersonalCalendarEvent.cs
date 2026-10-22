@@ -13,6 +13,7 @@ public sealed class PersonalCalendarEvent
     public Guid[] ParticipantIds { get; private set; } = [];
     public Guid[] AcceptedParticipantIds { get; private set; } = [];
     public PersonalCalendarEventStatus Status { get; private set; } = PersonalCalendarEventStatus.Confirmed;
+    public string? CancellationReason { get; private set; }
     public DateTimeOffset? ReminderDispatchedAt { get; private set; }
     public DateTimeOffset UpdatedAt { get; private set; }
 
@@ -59,8 +60,23 @@ public sealed class PersonalCalendarEvent
         if (Status != PersonalCalendarEventStatus.Pending || StartsAt > now)
             return false;
         Status = PersonalCalendarEventStatus.Cancelled;
+        CancellationReason = "The appointment was not confirmed before its start time.";
         UpdatedAt = now.ToUniversalTime();
         return true;
+    }
+
+    public ManualCancellationOutcome Cancel(string reason, DateTimeOffset now)
+    {
+        if (string.IsNullOrWhiteSpace(reason) || reason.Trim().Length > 500)
+            return ManualCancellationOutcome.InvalidReason;
+        if (Status is PersonalCalendarEventStatus.Cancelled or PersonalCalendarEventStatus.Declined)
+            return ManualCancellationOutcome.AlreadyHandled;
+        if (StartsAt <= now)
+            return ManualCancellationOutcome.AppointmentStarted;
+        Status = PersonalCalendarEventStatus.Cancelled;
+        CancellationReason = reason.Trim();
+        UpdatedAt = now.ToUniversalTime();
+        return ManualCancellationOutcome.Updated;
     }
 
     public ParticipantResponseOutcome Accept(Guid participantId, DateTimeOffset now)
@@ -89,3 +105,4 @@ public sealed class PersonalCalendarEvent
 
 public enum PersonalCalendarEventStatus { Pending, Confirmed, Declined, Cancelled }
 public enum ParticipantResponseOutcome { Updated, Forbidden, AlreadyHandled }
+public enum ManualCancellationOutcome { Updated, InvalidReason, AlreadyHandled, AppointmentStarted }

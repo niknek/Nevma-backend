@@ -28,6 +28,7 @@ public sealed class CalendarReminderProcessor(
                 new[] { item.UserId }.Concat(item.ParticipantIds).Distinct().ToArray(),
                 item.Title,
                 item.StartsAt,
+                item.CancellationReason!,
                 now));
         }
 
