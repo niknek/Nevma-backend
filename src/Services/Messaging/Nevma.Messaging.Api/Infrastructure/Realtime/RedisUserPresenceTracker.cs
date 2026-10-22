@@ -28,7 +28,12 @@ public sealed class RedisUserPresenceTracker(
         """;
     private const string RefreshScript = """
         local count = tonumber(redis.call('GET', KEYS[1]) or '0')
-        if count > 0 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end
+        if count <= 0 then
+            redis.call('SET', KEYS[1], 1, 'EX', ARGV[1])
+            count = 1
+        else
+            redis.call('EXPIRE', KEYS[1], ARGV[1])
+        end
         return count
         """;
 

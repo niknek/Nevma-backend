@@ -108,6 +108,16 @@ public static class ConversationEndpoints
             return Results.Ok(await presenceTracker.GetAsync(userId));
         });
 
+        conversations.MapPost("/presence/heartbeat", async (
+            ClaimsPrincipal principal,
+            IUserPresenceTracker presenceTracker) =>
+        {
+            if (!TryGetUserId(principal, out var userId))
+                return Results.Unauthorized();
+            await presenceTracker.RefreshAsync(userId);
+            return Results.Ok(await presenceTracker.GetAsync(userId));
+        });
+
         conversations.MapGet("/{conversationId:guid}/messages", async (
             Guid conversationId,
             long? before,
