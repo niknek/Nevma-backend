@@ -33,6 +33,30 @@ public sealed class IdentityApiTests
     }
 
     [Fact]
+    public async Task Password_login_returns_the_profile_name_for_the_account_menu()
+    {
+        using var factory = new IdentityApiFactory();
+        using var client = CreateClient(factory);
+        await factory.InitializeDatabaseAsync();
+        await client.PostAsJsonAsync("/api/auth/register", new RegisterUserRequest(
+            "profile-menu@example.com",
+            "Strong!Password123",
+            "Nektarios",
+            null));
+
+        var response = await client.PostAsJsonAsync("/api/auth/login", new
+        {
+            email = "profile-menu@example.com",
+            password = "Strong!Password123"
+        });
+        var session = await response.Content.ReadFromJsonAsync<ExternalLoginSession>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(session);
+        Assert.Equal("Nektarios", session.DisplayName);
+    }
+
+    [Fact]
     public async Task Login_page_contains_antiforgery_and_security_headers()
     {
         using var factory = new IdentityApiFactory();
@@ -78,7 +102,15 @@ public sealed class IdentityApiTests
     {
         using var factory = new IdentityApiFactory();
         using var client = CreateClient(factory);
-        var expectedUserId = Guid.NewGuid();
+        await factory.InitializeDatabaseAsync();
+        var registration = await client.PostAsJsonAsync("/api/auth/register", new RegisterUserRequest(
+            "external-session@example.com",
+            "Strong!Password123",
+            "External Session",
+            null));
+        var registeredUser = await registration.Content.ReadFromJsonAsync<UserSummary>();
+        Assert.NotNull(registeredUser);
+        var expectedUserId = registeredUser.Id;
         var dataProtectionProvider = factory.Services.GetRequiredService<IDataProtectionProvider>();
         var loginToken = dataProtectionProvider
             .CreateProtector("Nevma.Identity.ExternalLogin.v1")
@@ -97,6 +129,7 @@ public sealed class IdentityApiTests
         Assert.NotNull(session);
         Assert.True(session.Authenticated);
         Assert.Equal(expectedUserId, session.UserId);
+        Assert.Equal("External Session", session.DisplayName);
         Assert.Equal(HttpStatusCode.Unauthorized, invalidResponse.StatusCode);
     }
 
@@ -210,7 +243,7 @@ public sealed class IdentityApiTests
 
     private sealed record ExternalProviderStatus(string Provider, bool IsConfigured, string? Message);
 
-    private sealed record ExternalLoginSession(bool Authenticated, Guid UserId);
+    private sealed record ExternalLoginSession(bool Authenticated, Guid UserId, string DisplayName);
 
     private sealed class ProductionEnvironment : IWebHostEnvironment
     {

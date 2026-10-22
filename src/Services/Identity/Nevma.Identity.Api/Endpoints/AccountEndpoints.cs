@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Nevma.Identity.Api.Infrastructure.Authentication;
 using Nevma.Identity.Api.Infrastructure.Persistence;
 using Nevma.Identity.Api.Application.Security;
+using Nevma.Identity.Api.Application.Users;
 
 namespace Nevma.Identity.Api.Endpoints;
 
@@ -15,6 +16,7 @@ public static class AccountEndpoints
         endpoints.MapPost("/api/auth/login", async (
             LoginRequest request,
             SignInManager<IdentityAccount> signInManager,
+            UserService userService,
             SecurityEventService securityEvents,
             HttpContext context) =>
         {
@@ -25,9 +27,16 @@ public static class AccountEndpoints
             if (account is not null)
                 await securityEvents.RecordFromRequestAsync(account.Id, "login.password", result.Succeeded, context);
 
-            return result.Succeeded && account is not null
-                ? Results.Ok(new { authenticated = true, userId = account.Id })
-                : Results.Problem(statusCode: StatusCodes.Status401Unauthorized, title: "Sign-in failed.");
+            if (!result.Succeeded || account is null)
+                return Results.Problem(statusCode: StatusCodes.Status401Unauthorized, title: "Sign-in failed.");
+
+            var profile = await userService.GetByIdAsync(account.Id, context.RequestAborted);
+            return Results.Ok(new
+            {
+                authenticated = true,
+                userId = account.Id,
+                displayName = profile?.DisplayName ?? account.Email?.Split('@')[0] ?? "Nevma"
+            });
         }).AllowAnonymous().RequireRateLimiting(AuthenticationConfiguration.AuthenticationRateLimitPolicy);
 
         var account = endpoints.MapGroup("/account")

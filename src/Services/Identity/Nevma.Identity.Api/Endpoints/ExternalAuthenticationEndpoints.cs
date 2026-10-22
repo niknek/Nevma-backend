@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.WebUtilities;
+using Microsoft.EntityFrameworkCore;
 using Nevma.Identity.Api.Domain.Users;
 using Nevma.Identity.Api.Infrastructure.Authentication;
 using Nevma.Identity.Api.Infrastructure.Persistence;
@@ -125,9 +126,11 @@ public static class ExternalAuthenticationEndpoints
             return Results.Redirect(destination);
         });
 
-        account.MapPost("/external/exchange", (
+        account.MapPost("/external/exchange", async (
             ExternalLoginExchangeRequest request,
-            IDataProtectionProvider dataProtectionProvider) =>
+            IDataProtectionProvider dataProtectionProvider,
+            IdentityDbContext dbContext,
+            CancellationToken cancellationToken) =>
         {
             if (string.IsNullOrWhiteSpace(request.LoginToken))
                 return Results.Unauthorized();
@@ -138,9 +141,16 @@ public static class ExternalAuthenticationEndpoints
                     .CreateProtector(ExternalLoginProtectorPurpose)
                     .ToTimeLimitedDataProtector()
                     .Unprotect(request.LoginToken);
-                return Guid.TryParse(userIdValue, out var userId)
-                    ? Results.Ok(new { authenticated = true, userId })
-                    : Results.Unauthorized();
+                if (!Guid.TryParse(userIdValue, out var userId))
+                    return Results.Unauthorized();
+
+                var displayName = await dbContext.Profiles
+                    .Where(profile => profile.Id == userId)
+                    .Select(profile => profile.DisplayName)
+                    .SingleOrDefaultAsync(cancellationToken);
+                return displayName is null
+                    ? Results.Unauthorized()
+                    : Results.Ok(new { authenticated = true, userId, displayName });
             }
             catch (System.Security.Cryptography.CryptographicException)
             {
