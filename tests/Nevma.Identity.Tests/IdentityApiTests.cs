@@ -41,6 +41,33 @@ public sealed class IdentityApiTests
     }
 
     [Fact]
+    public async Task External_provider_status_is_explicit_and_instagram_is_not_presented_as_authentication()
+    {
+        using var factory = new IdentityApiFactory();
+        using var client = CreateClient(factory);
+
+        var providers = await client.GetFromJsonAsync<ExternalProviderStatus[]>("/account/external/providers");
+
+        Assert.NotNull(providers);
+        Assert.Contains(providers, provider => provider.Provider == "Google" && !provider.IsConfigured);
+        Assert.Contains(providers, provider => provider.Provider == "Facebook" && !provider.IsConfigured);
+        var instagram = Assert.Single(providers, provider => provider.Provider == "Instagram");
+        Assert.False(instagram.IsConfigured);
+        Assert.Contains("Facebook", instagram.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Unconfigured_external_provider_returns_service_unavailable()
+    {
+        using var factory = new IdentityApiFactory();
+        using var client = CreateClient(factory);
+
+        var response = await client.GetAsync("/account/external/google?returnUrl=http%3A%2F%2Flocalhost%3A5173%2F");
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+    }
+
+    [Fact]
     public async Task Token_endpoint_is_rate_limited()
     {
         using var factory = new IdentityApiFactory();
@@ -135,4 +162,6 @@ public sealed class IdentityApiTests
             BaseAddress = new Uri("https://localhost"),
             AllowAutoRedirect = false
         });
+
+    private sealed record ExternalProviderStatus(string Provider, bool IsConfigured, string? Message);
 }

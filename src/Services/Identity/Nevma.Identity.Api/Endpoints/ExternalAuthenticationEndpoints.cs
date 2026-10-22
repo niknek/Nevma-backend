@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.WebUtilities;
 using Nevma.Identity.Api.Domain.Users;
 using Nevma.Identity.Api.Infrastructure.Persistence;
 
@@ -15,10 +16,21 @@ public static class ExternalAuthenticationEndpoints
             .AllowAnonymous()
             .WithTags("Authentication");
 
+        account.MapGet("/external/providers", (IConfiguration configuration) => Results.Ok(new[]
+        {
+            new ExternalProviderResponse("Google", IsConfigured("Google", configuration), null),
+            new ExternalProviderResponse("Facebook", IsConfigured("Facebook", configuration), null),
+            new ExternalProviderResponse(
+                "Instagram",
+                false,
+                "Το Instagram δεν προσφέρει γενικό sign in για εφαρμογές. Χρησιμοποίησε το Facebook / Meta sign in.")
+        }));
+
         account.MapGet("/external/{provider}", (
             string provider,
             string? returnUrl,
-            IConfiguration configuration) =>
+            IConfiguration configuration,
+            IHostEnvironment environment) =>
         {
             var scheme = NormalizeProvider(provider);
             if (scheme is null || !IsConfigured(scheme, configuration))
@@ -29,7 +41,8 @@ public static class ExternalAuthenticationEndpoints
                     detail: "Configure the provider credentials in the Identity service environment.");
             }
 
-            var callback = $"/account/external-callback?returnUrl={Uri.EscapeDataString(NormalizeReturnUrl(returnUrl))}";
+            var safeReturnUrl = NormalizeReturnUrl(returnUrl, configuration, environment);
+            var callback = $"/account/external-callback?returnUrl={Uri.EscapeDataString(safeReturnUrl)}";
             return Results.Challenge(new AuthenticationProperties { RedirectUri = callback }, [scheme]);
         });
 
@@ -40,6 +53,8 @@ public static class ExternalAuthenticationEndpoints
             SignInManager<IdentityAccount> signInManager,
             IdentityDbContext dbContext,
             TimeProvider timeProvider,
+            IConfiguration configuration,
+            IHostEnvironment environment,
             CancellationToken cancellationToken) =>
         {
             var external = await context.AuthenticateAsync(IdentityConstants.ExternalScheme);
@@ -92,7 +107,13 @@ public static class ExternalAuthenticationEndpoints
 
             await signInManager.SignInAsync(account, isPersistent: false);
             await context.SignOutAsync(IdentityConstants.ExternalScheme);
-            return Results.Redirect(NormalizeReturnUrl(returnUrl));
+            var destination = NormalizeReturnUrl(returnUrl, configuration, environment);
+            destination = QueryHelpers.AddQueryString(destination, new Dictionary<string, string?>
+            {
+                ["signedIn"] = "1",
+                ["userId"] = account.Id.ToString()
+            });
+            return Results.Redirect(destination);
         });
 
         return endpoints;
@@ -112,8 +133,39 @@ public static class ExternalAuthenticationEndpoints
         _ => false
     };
 
-    private static string NormalizeReturnUrl(string? returnUrl) =>
-        !string.IsNullOrWhiteSpace(returnUrl) && returnUrl.StartsWith("/", StringComparison.Ordinal) && !returnUrl.StartsWith("//", StringComparison.Ordinal)
-            ? returnUrl
-            : "/account/login";
+    private static string NormalizeReturnUrl(
+        string? returnUrl,
+        IConfiguration configuration,
+        IHostEnvironment environment)
+    {
+        if (!string.IsNullOrWhiteSpace(returnUrl))
+        {
+            if (returnUrl.StartsWith("/", StringComparison.Ordinal) &&
+                !returnUrl.StartsWith("//", StringComparison.Ordinal))
+                return returnUrl;
+
+            if (Uri.TryCreate(returnUrl, UriKind.Absolute, out var requested) &&
+                configuration.GetSection("Authentication:AllowedExternalReturnUrls").Get<string[]>()
+                    ?.Any(allowed => IsSameReturnDestination(requested, allowed)) == true)
+                return returnUrl;
+        }
+
+        var configuredFallback = configuration
+            .GetSection("Authentication:AllowedExternalReturnUrls")
+            .Get<string[]>()
+            ?.FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(configuredFallback))
+            return configuredFallback;
+
+        return environment.IsDevelopment() ? "http://localhost:5173/" : "/account/login";
+    }
+
+    private static bool IsSameReturnDestination(Uri requested, string allowed) =>
+        Uri.TryCreate(allowed, UriKind.Absolute, out var allowedUri) &&
+        string.Equals(requested.Scheme, allowedUri.Scheme, StringComparison.OrdinalIgnoreCase) &&
+        string.Equals(requested.Host, allowedUri.Host, StringComparison.OrdinalIgnoreCase) &&
+        requested.Port == allowedUri.Port &&
+        string.Equals(requested.AbsolutePath.TrimEnd('/'), allowedUri.AbsolutePath.TrimEnd('/'), StringComparison.OrdinalIgnoreCase);
+
+    private sealed record ExternalProviderResponse(string Provider, bool IsConfigured, string? Message);
 }
