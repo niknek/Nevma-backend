@@ -189,6 +189,53 @@ namespace Nevma.Messaging.Api.Infrastructure.Persistence.Migrations
                     b.ToTable("message_receipts", "messaging");
                 });
 
+            modelBuilder.Entity("Nevma.Messaging.Api.Domain.Stories.Story", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.PrimitiveCollection<Guid[]>("AudienceIds")
+                        .IsRequired()
+                        .HasColumnType("uuid[]");
+
+                    b.Property<string>("Caption")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("FileAssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("MediaType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid");
+
+                    b.PrimitiveCollection<Guid[]>("SeenByIds")
+                        .IsRequired()
+                        .HasColumnType("uuid[]");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AudienceIds");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("AudienceIds"), "gin");
+
+                    b.HasIndex("ExpiresAt");
+
+                    b.HasIndex("OwnerId");
+
+                    b.ToTable("stories", "messaging");
+                });
+
             modelBuilder.Entity("Nevma.Messaging.Api.Infrastructure.Inbox.InboxMessage", b =>
                 {
                     b.Property<Guid>("Id")

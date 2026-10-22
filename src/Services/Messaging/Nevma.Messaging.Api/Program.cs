@@ -37,6 +37,7 @@ app.UseAuthorization();
 app.MapHealthChecks("/health");
 app.MapHub<ChatHub>("/hubs/chat").RequireAuthorization();
 app.MapConversationEndpoints();
+app.MapStoryEndpoints();
 app.MapSearchEndpoints();
 
 app.Run();
