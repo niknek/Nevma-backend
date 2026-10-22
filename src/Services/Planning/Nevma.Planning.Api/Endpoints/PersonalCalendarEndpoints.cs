@@ -133,13 +133,17 @@ public static class PersonalCalendarEndpoints
         DateTimeOffset startsAt,
         DateTimeOffset endsAt,
         Guid? excludedEventId,
-        CancellationToken ct) =>
-        db.PersonalCalendarEvents.AnyAsync(item =>
+        CancellationToken ct)
+    {
+        var utcStart = startsAt.ToUniversalTime();
+        var utcEnd = endsAt.ToUniversalTime();
+        return db.PersonalCalendarEvents.AnyAsync(item =>
             (!excludedEventId.HasValue || item.Id != excludedEventId.Value) &&
             (item.UserId == userId || item.ParticipantIds.Contains(userId)) &&
             (item.Status == PersonalCalendarEventStatus.Pending || item.Status == PersonalCalendarEventStatus.Confirmed || item.Status == PersonalCalendarEventStatus.PartiallyAccepted) &&
-            item.StartsAt < endsAt && item.EndsAt > startsAt,
+            item.StartsAt < utcEnd && item.EndsAt > utcStart,
             ct);
+    }
 
     private static IResult ConflictResult() =>
         Results.Conflict(new { message = "Another active appointment overlaps this time." });
