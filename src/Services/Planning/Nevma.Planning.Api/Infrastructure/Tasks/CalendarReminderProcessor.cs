@@ -20,7 +20,16 @@ public sealed class CalendarReminderProcessor(
             .Take(batchSize)
             .ToListAsync(cancellationToken);
         foreach (var item in expired)
-            item.CancelIfExpired(now);
+        {
+            if (!item.CancelIfExpired(now)) continue;
+            outbox.Add(new CalendarEventExpiredIntegrationEvent(
+                Guid.NewGuid(),
+                item.Id,
+                new[] { item.UserId }.Concat(item.ParticipantIds).Distinct().ToArray(),
+                item.Title,
+                item.StartsAt,
+                now));
+        }
 
         var reminderWindowEnd = now.AddHours(1);
         var events = await dbContext.PersonalCalendarEvents

@@ -42,4 +42,14 @@ public sealed class EfPlanningEventOutbox(PlanningDbContext dbContext) : IPlanni
             payload,
             integrationEvent.OccurredAt));
     }
+
+    public void Add(CalendarEventExpiredIntegrationEvent integrationEvent)
+    {
+        var payload = JsonSerializer.Serialize(integrationEvent, SerializerOptions);
+        dbContext.OutboxMessages.Add(OutboxMessage.Create(
+            integrationEvent.EventId,
+            PlanningIntegrationEventTypes.CalendarEventExpired,
+            payload,
+            integrationEvent.OccurredAt));
+    }
 }

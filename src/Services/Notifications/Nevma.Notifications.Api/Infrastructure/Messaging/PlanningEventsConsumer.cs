@@ -123,6 +123,11 @@ public sealed class PlanningEventsConsumer(
             _options.Exchange,
             PlanningIntegrationEventTypes.CalendarEventReminderDue,
             cancellationToken: cancellationToken);
+        await channel.QueueBindAsync(
+            _options.Queue,
+            _options.Exchange,
+            PlanningIntegrationEventTypes.CalendarEventExpired,
+            cancellationToken: cancellationToken);
         await channel.BasicQosAsync(0, 10, false, cancellationToken);
     }
 
@@ -143,6 +148,8 @@ public sealed class PlanningEventsConsumer(
                     await HandleTaskReminderAsync(handler, delivery.Body.ToArray(), cancellationToken),
                 PlanningIntegrationEventTypes.CalendarEventReminderDue =>
                     await HandleCalendarReminderAsync(handler, delivery.Body.ToArray(), cancellationToken),
+                PlanningIntegrationEventTypes.CalendarEventExpired =>
+                    await HandleCalendarExpiredAsync(handler, delivery.Body.ToArray(), cancellationToken),
                 _ => throw new InvalidDataException("Unsupported integration event type.")
             };
             if (!string.Equals(
@@ -204,6 +211,18 @@ public sealed class PlanningEventsConsumer(
         CancellationToken cancellationToken)
     {
         var integrationEvent = JsonSerializer.Deserialize<CalendarEventReminderDueIntegrationEvent>(
+            body,
+            SerializerOptions) ?? throw new InvalidDataException("Integration event payload is empty.");
+        await handler.HandleAsync(integrationEvent, cancellationToken);
+        return integrationEvent.EventId;
+    }
+
+    private static async Task<Guid> HandleCalendarExpiredAsync(
+        PlanningEventHandler handler,
+        byte[] body,
+        CancellationToken cancellationToken)
+    {
+        var integrationEvent = JsonSerializer.Deserialize<CalendarEventExpiredIntegrationEvent>(
             body,
             SerializerOptions) ?? throw new InvalidDataException("Integration event payload is empty.");
         await handler.HandleAsync(integrationEvent, cancellationToken);

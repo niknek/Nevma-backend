@@ -125,8 +125,8 @@ public sealed class PlanningEventHandler(
             var notification = Notification.Create(
                 userId,
                 "calendar.reminder",
-                "Appointment in one hour",
-                $"{integrationEvent.Title} starts in one hour.",
+                "Appointment coming up",
+                $"{integrationEvent.Title} starts soon.",
                 now);
             await notificationRepository.AddAsync(notification, cancellationToken);
             created.Add(notification);
@@ -136,6 +136,40 @@ public sealed class PlanningEventHandler(
         }
 
         inbox.Add(integrationEvent.EventId, PlanningIntegrationEventTypes.CalendarEventReminderDue, now);
+        try { await unitOfWork.SaveChangesAsync(cancellationToken); }
+        catch (DuplicateNotificationEventException) { return PlanningEventHandleResult.AlreadyProcessed; }
+        foreach (var notification in created)
+            await PublishBestEffortAsync(notification, cancellationToken);
+        return PlanningEventHandleResult.Processed;
+    }
+
+    public async Task<PlanningEventHandleResult> HandleAsync(
+        CalendarEventExpiredIntegrationEvent integrationEvent,
+        CancellationToken cancellationToken = default)
+    {
+        if (await inbox.ExistsAsync(integrationEvent.EventId, cancellationToken))
+            return PlanningEventHandleResult.AlreadyProcessed;
+        if (integrationEvent.CalendarEventId == Guid.Empty || integrationEvent.UserIds.Count == 0)
+            throw new InvalidDataException("Expired calendar event identifiers are required.");
+
+        var now = timeProvider.GetUtcNow();
+        var created = new List<Notification>();
+        foreach (var userId in integrationEvent.UserIds.Where(id => id != Guid.Empty).Distinct())
+        {
+            var notification = Notification.Create(
+                userId,
+                "calendar.cancelled",
+                "Appointment cancelled",
+                $"{integrationEvent.Title} was cancelled because it was not confirmed before its start time.",
+                now);
+            await notificationRepository.AddAsync(notification, cancellationToken);
+            created.Add(notification);
+            var devices = await pushDeviceRepository.ListActiveAsync(userId, cancellationToken);
+            foreach (var device in devices)
+                await deliveryAttemptRepository.AddAsync(DeliveryAttempt.Create(notification.Id, device.Id, now), cancellationToken);
+        }
+
+        inbox.Add(integrationEvent.EventId, PlanningIntegrationEventTypes.CalendarEventExpired, now);
         try { await unitOfWork.SaveChangesAsync(cancellationToken); }
         catch (DuplicateNotificationEventException) { return PlanningEventHandleResult.AlreadyProcessed; }
         foreach (var notification in created)
