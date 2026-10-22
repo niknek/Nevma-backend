@@ -78,7 +78,7 @@ public static class PersonalCalendarEndpoints
             if (outcome == ParticipantResponseOutcome.AlreadyHandled) return Results.Conflict(new { message = "Invitation has already been handled." });
             if (outcome == ParticipantResponseOutcome.InvalidReason)
                 return Results.ValidationProblem(new Dictionary<string, string[]> { ["reason"] = ["The reason must be up to 500 characters."] });
-            AddInvitationEvent(outbox, item, userId, MeetingInvitationStatus.Declined, now);
+            AddInvitationEvent(outbox, item, userId, MeetingInvitationStatus.Declined, now, request.Reason);
             await db.SaveChangesAsync(ct);
             return Results.Ok(item);
         });
@@ -110,10 +110,15 @@ public static class PersonalCalendarEndpoints
         PersonalCalendarEvent item,
         Guid participantId,
         MeetingInvitationStatus status,
-        DateTimeOffset now) =>
+        DateTimeOffset now,
+        string? responseReason = null) =>
         outbox.Add(new MeetingInvitationChangedIntegrationEvent(
             Guid.NewGuid(), item.Id, item.UserId, participantId, item.Title, item.StartsAt,
-            item.EndsAt - item.StartsAt, item.Location, status, null, null, null, item.Id, now));
+            item.EndsAt - item.StartsAt, item.Location, status, null, null, null, item.Id, now,
+            responseReason,
+            item.AcceptedParticipantIds.Length,
+            item.ParticipantIds.Length - item.AcceptedParticipantIds.Length - item.DeclinedParticipantIds.Length,
+            item.DeclinedParticipantIds.Length));
 
     private static IResult? ValidateDate(PersonalEventRequest request, DateTimeOffset now)
     {

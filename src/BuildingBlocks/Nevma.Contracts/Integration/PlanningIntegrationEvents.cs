@@ -16,7 +16,11 @@ public sealed record MeetingInvitationChangedIntegrationEvent(
     TimeSpan? ProposedDuration,
     string? ProposedLocation,
     Guid? CalendarEventId,
-    DateTimeOffset OccurredAt);
+    DateTimeOffset OccurredAt,
+    string? ResponseReason = null,
+    int? AcceptedCount = null,
+    int? PendingCount = null,
+    int? DeclinedCount = null);
 
 public sealed record TaskReminderDueIntegrationEvent(
     Guid EventId,
