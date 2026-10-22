@@ -14,6 +14,14 @@ public sealed class CalendarReminderProcessor(
     public async Task<int> ProcessDueAsync(int batchSize = 100, CancellationToken cancellationToken = default)
     {
         var now = timeProvider.GetUtcNow();
+        var expired = await dbContext.PersonalCalendarEvents
+            .Where(item => item.Status == PersonalCalendarEventStatus.Pending && item.EndsAt <= now)
+            .OrderBy(item => item.EndsAt)
+            .Take(batchSize)
+            .ToListAsync(cancellationToken);
+        foreach (var item in expired)
+            item.CancelIfExpired(now);
+
         var reminderWindowEnd = now.AddHours(1);
         var events = await dbContext.PersonalCalendarEvents
             .Where(item =>
@@ -37,7 +45,7 @@ public sealed class CalendarReminderProcessor(
                 now));
         }
 
-        if (events.Count > 0)
+        if (events.Count > 0 || expired.Count > 0)
             await dbContext.SaveChangesAsync(cancellationToken);
         return events.Count;
     }

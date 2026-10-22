@@ -38,4 +38,16 @@ public sealed class PersonalCalendarEventTests
         Assert.Equal(ParticipantResponseOutcome.Updated, outcome);
         Assert.Equal(PersonalCalendarEventStatus.Declined, appointment.Status);
     }
+
+    [Fact]
+    public void A_pending_appointment_is_cancelled_after_its_end_time()
+    {
+        var appointment = PersonalCalendarEvent.Create(
+            Guid.NewGuid(), "Coffee", null, null, Now.AddMinutes(10), Now.AddMinutes(40),
+            [Guid.NewGuid()], Now);
+
+        Assert.False(appointment.CancelIfExpired(Now.AddMinutes(39)));
+        Assert.True(appointment.CancelIfExpired(Now.AddMinutes(40)));
+        Assert.Equal(PersonalCalendarEventStatus.Cancelled, appointment.Status);
+    }
 }

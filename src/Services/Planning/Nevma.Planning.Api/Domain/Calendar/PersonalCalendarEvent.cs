@@ -54,6 +54,15 @@ public sealed class PersonalCalendarEvent
     public void MarkReminderDispatched(DateTimeOffset dispatchedAt) =>
         ReminderDispatchedAt = dispatchedAt.ToUniversalTime();
 
+    public bool CancelIfExpired(DateTimeOffset now)
+    {
+        if (Status != PersonalCalendarEventStatus.Pending || EndsAt > now)
+            return false;
+        Status = PersonalCalendarEventStatus.Cancelled;
+        UpdatedAt = now.ToUniversalTime();
+        return true;
+    }
+
     public ParticipantResponseOutcome Accept(Guid participantId, DateTimeOffset now)
     {
         if (!ParticipantIds.Contains(participantId)) return ParticipantResponseOutcome.Forbidden;
@@ -78,5 +87,5 @@ public sealed class PersonalCalendarEvent
     }
 }
 
-public enum PersonalCalendarEventStatus { Pending, Confirmed, Declined }
+public enum PersonalCalendarEventStatus { Pending, Confirmed, Declined, Cancelled }
 public enum ParticipantResponseOutcome { Updated, Forbidden, AlreadyHandled }
