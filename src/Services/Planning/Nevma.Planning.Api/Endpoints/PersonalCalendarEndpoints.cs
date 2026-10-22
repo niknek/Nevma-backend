@@ -45,6 +45,9 @@ public static class PersonalCalendarEndpoints
             if (item.StartsAt <= currentTime)
                 return Results.Conflict(new { message = "An appointment that has already started cannot be edited." });
             var validation = ValidateDate(request, currentTime); if (validation is not null) return validation;
+            var requestedParticipants = (request.ParticipantIds ?? []).ToHashSet();
+            if (item.ParticipantIds.Any(participantId => !requestedParticipants.Contains(participantId)))
+                return Results.Conflict(new { message = "Existing participants cannot be removed. Cancel this appointment and create a new one instead." });
             if (await HasActiveConflict(db, userId, request.StartsAt, request.EndsAt, item.Id, ct))
                 return ConflictResult();
             var previousParticipants = item.ParticipantIds.ToHashSet();
