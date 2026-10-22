@@ -6,9 +6,28 @@ public sealed record RegisterUserRequest(
     string DisplayName,
     string? AvatarUrl);
 
-public sealed record UserSummary(Guid Id, string DisplayName, string? AvatarUrl);
+public sealed record UserSummary(
+    Guid Id,
+    string DisplayName,
+    string? AvatarUrl,
+    string? Bio = null,
+    string? ContactEmail = null,
+    string? Phone = null,
+    bool ShowEmail = false,
+    bool ShowPhone = false,
+    string Availability = "Available",
+    string StoryPrivacy = "Contacts");
 
-public sealed record UpdateProfileRequest(string DisplayName, string? AvatarUrl);
+public sealed record UpdateProfileRequest(
+    string DisplayName,
+    string? AvatarUrl,
+    string? Bio = null,
+    string? ContactEmail = null,
+    string? Phone = null,
+    bool ShowEmail = false,
+    bool ShowPhone = false,
+    string Availability = "Available",
+    string StoryPrivacy = "Contacts");
 
 public sealed record UserSettingsResponse(
     string TimeZoneId,

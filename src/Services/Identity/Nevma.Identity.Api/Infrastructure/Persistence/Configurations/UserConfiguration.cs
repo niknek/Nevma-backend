@@ -14,6 +14,11 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(user => user.Id).ValueGeneratedNever();
         builder.Property(user => user.DisplayName).HasMaxLength(100).IsRequired();
         builder.Property(user => user.AvatarUrl).HasMaxLength(2_048);
+        builder.Property(user => user.Bio).HasMaxLength(300);
+        builder.Property(user => user.ContactEmail).HasMaxLength(320);
+        builder.Property(user => user.Phone).HasMaxLength(30);
+        builder.Property(user => user.Availability).HasMaxLength(20).HasDefaultValue("Available").IsRequired();
+        builder.Property(user => user.StoryPrivacy).HasMaxLength(20).HasDefaultValue("Contacts").IsRequired();
         builder.Property(user => user.CreatedAt).IsRequired();
         builder
             .HasOne<IdentityAccount>()

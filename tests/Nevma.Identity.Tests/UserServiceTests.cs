@@ -35,11 +35,18 @@ public sealed class UserServiceTests
 
         var result = await service.UpdateAsync(
             profile.Id,
-            new UpdateProfileRequest("New name", "https://cdn.nevma.test/avatar.jpg"));
+            new UpdateProfileRequest("New name", "https://cdn.nevma.test/avatar.jpg", "Bio", "me@example.com",
+                "+306900000000", true, false, "Busy", "Private"));
 
         var updated = Assert.IsType<UpdateProfileResult.Updated>(result);
         Assert.Equal("New name", updated.User.DisplayName);
         Assert.Equal("https://cdn.nevma.test/avatar.jpg", updated.User.AvatarUrl);
+        Assert.Equal("Bio", updated.User.Bio);
+        Assert.Equal("me@example.com", updated.User.ContactEmail);
+        Assert.True(updated.User.ShowEmail);
+        Assert.False(updated.User.ShowPhone);
+        Assert.Equal("Busy", updated.User.Availability);
+        Assert.Equal("Private", updated.User.StoryPrivacy);
     }
 
     private static IdentityDbContext CreateContext()

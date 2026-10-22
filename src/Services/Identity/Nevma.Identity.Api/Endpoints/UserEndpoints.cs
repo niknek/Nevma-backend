@@ -9,17 +9,16 @@ public static class UserEndpoints
 {
     public static IEndpointRouteBuilder MapUserEndpoints(this IEndpointRouteBuilder endpoints)
     {
-        var users = endpoints.MapGroup("/api/users")
-            .WithTags("Users")
-            .RequireAuthorization();
+        var users = endpoints.MapGroup("/api/users").WithTags("Users");
+        if (!endpoints.ServiceProvider.GetRequiredService<IHostEnvironment>().IsDevelopment())
+            users.RequireAuthorization();
 
         users.MapGet("/me", async (
             ClaimsPrincipal principal,
             UserService service,
             CancellationToken cancellationToken) =>
         {
-            var subject = principal.FindFirstValue(OpenIddictConstants.Claims.Subject);
-            if (!Guid.TryParse(subject, out var userId))
+            if (!TryGetUserId(principal, out var userId))
                 return Results.Unauthorized();
 
             var user = await service.GetByIdAsync(userId, cancellationToken);
@@ -38,7 +37,14 @@ public static class UserEndpoints
             if (viewerId != id && await privacyService.IsBlockedAsync(viewerId, id, cancellationToken))
                 return Results.NotFound();
             var user = await service.GetByIdAsync(id, cancellationToken);
-            return user is null ? Results.NotFound() : Results.Ok(user);
+            if (user is null) return Results.NotFound();
+            if (viewerId != id)
+                user = user with
+                {
+                    ContactEmail = user.ShowEmail ? user.ContactEmail : null,
+                    Phone = user.ShowPhone ? user.Phone : null
+                };
+            return Results.Ok(user);
         });
 
         users.MapPut("/me", async (
