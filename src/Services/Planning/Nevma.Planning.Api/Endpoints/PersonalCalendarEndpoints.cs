@@ -37,9 +37,12 @@ public static class PersonalCalendarEndpoints
             if (!TryUser(context, out var userId)) return Results.Unauthorized();
             var item = await db.PersonalCalendarEvents.SingleOrDefaultAsync(x => x.Id == id && x.UserId == userId, ct);
             if (item is null) return Results.NotFound();
-            var validation = ValidateDate(request, clock.GetUtcNow()); if (validation is not null) return validation;
+            var currentTime = clock.GetUtcNow();
+            if (item.StartsAt <= currentTime)
+                return Results.Conflict(new { message = "An appointment that has already started cannot be edited." });
+            var validation = ValidateDate(request, currentTime); if (validation is not null) return validation;
             var previousParticipants = item.ParticipantIds.ToHashSet();
-            var now = clock.GetUtcNow();
+            var now = currentTime;
             item.Update(request.Title, request.Purpose, request.Location, request.StartsAt, request.EndsAt, request.ParticipantIds, now);
             foreach (var participantId in item.ParticipantIds.Where(idValue => !previousParticipants.Contains(idValue)))
                 AddInvitationEvent(outbox, item, participantId, MeetingInvitationStatus.Pending, now);
