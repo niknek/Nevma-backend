@@ -40,6 +40,7 @@ public sealed class NotificationPreferenceService(
         preference.Update(
             request.PushEnabled,
             request.MeetingNotificationsEnabled,
+            request.CalendarRemindersEnabled,
             request.TaskRemindersEnabled,
             request.QuietHoursStart,
             request.QuietHoursEnd,
@@ -65,6 +66,7 @@ public sealed class NotificationPreferenceService(
         new(
             preference.PushEnabled,
             preference.MeetingNotificationsEnabled,
+            preference.CalendarRemindersEnabled,
             preference.TaskRemindersEnabled,
             preference.QuietHoursStart,
             preference.QuietHoursEnd,

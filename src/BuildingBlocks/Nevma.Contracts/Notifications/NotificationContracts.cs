@@ -24,6 +24,7 @@ public sealed record NotificationResponse(
 public sealed record NotificationPreferenceResponse(
     bool PushEnabled,
     bool MeetingNotificationsEnabled,
+    bool CalendarRemindersEnabled,
     bool TaskRemindersEnabled,
     TimeOnly? QuietHoursStart,
     TimeOnly? QuietHoursEnd,
@@ -33,6 +34,7 @@ public sealed record NotificationPreferenceResponse(
 public sealed record UpdateNotificationPreferenceRequest(
     bool PushEnabled,
     bool MeetingNotificationsEnabled,
+    bool CalendarRemindersEnabled,
     bool TaskRemindersEnabled,
     TimeOnly? QuietHoursStart,
     TimeOnly? QuietHoursEnd,

@@ -32,4 +32,14 @@ public sealed class EfPlanningEventOutbox(PlanningDbContext dbContext) : IPlanni
             payload,
             integrationEvent.OccurredAt));
     }
+
+    public void Add(CalendarEventReminderDueIntegrationEvent integrationEvent)
+    {
+        var payload = JsonSerializer.Serialize(integrationEvent, SerializerOptions);
+        dbContext.OutboxMessages.Add(OutboxMessage.Create(
+            integrationEvent.EventId,
+            PlanningIntegrationEventTypes.CalendarEventReminderDue,
+            payload,
+            integrationEvent.OccurredAt));
+    }
 }

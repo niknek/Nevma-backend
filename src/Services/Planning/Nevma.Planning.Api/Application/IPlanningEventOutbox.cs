@@ -6,4 +6,5 @@ public interface IPlanningEventOutbox
 {
     void Add(MeetingInvitationChangedIntegrationEvent integrationEvent);
     void Add(TaskReminderDueIntegrationEvent integrationEvent);
+    void Add(CalendarEventReminderDueIntegrationEvent integrationEvent);
 }

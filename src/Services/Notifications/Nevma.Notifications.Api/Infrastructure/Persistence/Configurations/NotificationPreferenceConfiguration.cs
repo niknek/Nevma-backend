@@ -12,6 +12,7 @@ public sealed class NotificationPreferenceConfiguration : IEntityTypeConfigurati
         builder.HasKey(preference => preference.UserId);
         builder.Property(preference => preference.PushEnabled).IsRequired();
         builder.Property(preference => preference.MeetingNotificationsEnabled).IsRequired();
+        builder.Property(preference => preference.CalendarRemindersEnabled).IsRequired();
         builder.Property(preference => preference.TaskRemindersEnabled).IsRequired();
         builder.Property(preference => preference.QuietHoursStart);
         builder.Property(preference => preference.QuietHoursEnd);

@@ -40,6 +40,8 @@ public static class DependencyInjection
         services.AddScoped<IPlanningSearchService, EfPlanningSearchService>();
         services.AddScoped<TaskReminderProcessor>();
         services.AddHostedService<TaskReminderWorker>();
+        services.AddScoped<CalendarReminderProcessor>();
+        services.AddHostedService<CalendarReminderWorker>();
 
         var brokerOptions = configuration
             .GetSection(MessageBrokerOptions.SectionName)

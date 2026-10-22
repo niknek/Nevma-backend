@@ -6,6 +6,7 @@ public sealed class NotificationPreference
         Guid userId,
         bool pushEnabled,
         bool meetingNotificationsEnabled,
+        bool calendarRemindersEnabled,
         bool taskRemindersEnabled,
         TimeOnly? quietHoursStart,
         TimeOnly? quietHoursEnd,
@@ -15,6 +16,7 @@ public sealed class NotificationPreference
         UserId = userId;
         PushEnabled = pushEnabled;
         MeetingNotificationsEnabled = meetingNotificationsEnabled;
+        CalendarRemindersEnabled = calendarRemindersEnabled;
         TaskRemindersEnabled = taskRemindersEnabled;
         QuietHoursStart = quietHoursStart;
         QuietHoursEnd = quietHoursEnd;
@@ -25,6 +27,7 @@ public sealed class NotificationPreference
     public Guid UserId { get; }
     public bool PushEnabled { get; private set; }
     public bool MeetingNotificationsEnabled { get; private set; }
+    public bool CalendarRemindersEnabled { get; private set; }
     public bool TaskRemindersEnabled { get; private set; }
     public TimeOnly? QuietHoursStart { get; private set; }
     public TimeOnly? QuietHoursEnd { get; private set; }
@@ -32,11 +35,12 @@ public sealed class NotificationPreference
     public DateTimeOffset UpdatedAt { get; private set; }
 
     public static NotificationPreference CreateDefault(Guid userId, DateTimeOffset now) =>
-        new(userId, true, true, true, null, null, "UTC", now);
+        new(userId, true, true, true, true, null, null, "UTC", now);
 
     public void Update(
         bool pushEnabled,
         bool meetingNotificationsEnabled,
+        bool calendarRemindersEnabled,
         bool taskRemindersEnabled,
         TimeOnly? quietHoursStart,
         TimeOnly? quietHoursEnd,
@@ -45,6 +49,7 @@ public sealed class NotificationPreference
     {
         PushEnabled = pushEnabled;
         MeetingNotificationsEnabled = meetingNotificationsEnabled;
+        CalendarRemindersEnabled = calendarRemindersEnabled;
         TaskRemindersEnabled = taskRemindersEnabled;
         QuietHoursStart = quietHoursStart;
         QuietHoursEnd = quietHoursEnd;
@@ -56,6 +61,7 @@ public sealed class NotificationPreference
     {
         if (!PushEnabled ||
             (notificationType.StartsWith("meeting-", StringComparison.Ordinal) && !MeetingNotificationsEnabled) ||
+            (notificationType == "calendar.reminder" && !CalendarRemindersEnabled) ||
             (notificationType == "task.reminder" && !TaskRemindersEnabled))
             return DeliveryPreference.Disabled;
         if (QuietHoursStart is null || QuietHoursEnd is null || QuietHoursStart == QuietHoursEnd)

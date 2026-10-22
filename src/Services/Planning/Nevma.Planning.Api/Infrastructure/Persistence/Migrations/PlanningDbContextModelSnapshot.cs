@@ -106,6 +106,9 @@ namespace Nevma.Planning.Api.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
 
+                    b.Property<DateTimeOffset?>("ReminderDispatchedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTimeOffset>("StartsAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -130,6 +133,8 @@ namespace Nevma.Planning.Api.Infrastructure.Persistence.Migrations
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("ParticipantIds"), "gin");
 
                     b.HasIndex("UserId", "StartsAt");
+
+                    b.HasIndex("Status", "StartsAt", "ReminderDispatchedAt");
 
                     b.ToTable("personal_calendar_events", "planning");
                 });

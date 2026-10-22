@@ -124,6 +124,9 @@ namespace Nevma.Notifications.Api.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<bool>("CalendarRemindersEnabled")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("MeetingNotificationsEnabled")
                         .HasColumnType("boolean");
 

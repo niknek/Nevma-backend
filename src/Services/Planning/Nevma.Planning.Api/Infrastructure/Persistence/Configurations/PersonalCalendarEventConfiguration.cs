@@ -15,6 +15,8 @@ public sealed class PersonalCalendarEventConfiguration : IEntityTypeConfiguratio
         builder.Property(x => x.Location).HasMaxLength(500);
         builder.Property(x => x.ParticipantIds).HasColumnType("uuid[]");
         builder.Property(x => x.AcceptedParticipantIds).HasColumnType("uuid[]");
+        builder.Property(x => x.ReminderDispatchedAt);
+        builder.HasIndex(x => new { x.Status, x.StartsAt, x.ReminderDispatchedAt });
         builder.HasIndex(x => new { x.UserId, x.StartsAt });
         builder.HasIndex(x => x.ParticipantIds).HasMethod("gin");
     }

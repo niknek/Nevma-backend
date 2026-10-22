@@ -13,6 +13,7 @@ public sealed class PersonalCalendarEvent
     public Guid[] ParticipantIds { get; private set; } = [];
     public Guid[] AcceptedParticipantIds { get; private set; } = [];
     public PersonalCalendarEventStatus Status { get; private set; } = PersonalCalendarEventStatus.Confirmed;
+    public DateTimeOffset? ReminderDispatchedAt { get; private set; }
     public DateTimeOffset UpdatedAt { get; private set; }
 
     public static PersonalCalendarEvent Create(
@@ -49,6 +50,9 @@ public sealed class PersonalCalendarEvent
             : PersonalCalendarEventStatus.Pending;
         UpdatedAt = now.ToUniversalTime();
     }
+
+    public void MarkReminderDispatched(DateTimeOffset dispatchedAt) =>
+        ReminderDispatchedAt = dispatchedAt.ToUniversalTime();
 
     public ParticipantResponseOutcome Accept(Guid participantId, DateTimeOffset now)
     {
