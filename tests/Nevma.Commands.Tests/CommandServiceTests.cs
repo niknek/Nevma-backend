@@ -185,6 +185,41 @@ public sealed class CommandServiceTests
     }
 
     [Fact]
+    public void Voice_command_uses_the_selected_response_language()
+    {
+        var result = new BilingualTemporalNormalizer().TryCreateFallback(
+            "Κλείσε ένα καφέ με την Κωνσταντίνα αύριο στις 6 το απόγευμα",
+            Now,
+            "en",
+            [new AssistantContact(null, "Konstantina Nika", Guid.NewGuid())]);
+
+        Assert.Null(result.Command);
+        Assert.StartsWith("Konstantina Nika is not linked", result.Clarification, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("Κλείσε ένα καφέ με την Κωνσταντίνα αύριο στις 6 το απόγευμα", "en-US", "Konstantina Nika is not linked")]
+    [InlineData("Book coffee with Konstantina tomorrow at 6 PM", "el-GR", "Η επαφή Konstantina Nika")]
+    public async Task Assistant_replies_in_the_selected_app_language(string message, string locale, string expected)
+    {
+        await using var context = CreateContext();
+        var service = new AssistantService(
+            new UnavailableAssistantProvider(),
+            new BilingualTemporalNormalizer(),
+            new CommandValidator(),
+            new EfCommandRepository(context),
+            context,
+            new FixedTimeProvider());
+
+        var result = Assert.IsType<AssistantResult.Completed>(await service.RespondAsync(
+            Guid.NewGuid(),
+            new AssistantRequest(message, $"language-{locale}", locale, 0, null, [],
+                [new AssistantContact(null, "Konstantina Nika", Guid.NewGuid())])));
+
+        Assert.StartsWith(expected, result.Response.Reply, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Voice_command_adds_a_linked_contact_to_the_confirmation_preview()
     {
         var konstantinaId = Guid.NewGuid();

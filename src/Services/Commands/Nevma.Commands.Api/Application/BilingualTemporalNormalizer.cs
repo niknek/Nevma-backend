@@ -48,10 +48,11 @@ public sealed partial class BilingualTemporalNormalizer
             return new TemporalNormalizationResult(command, null);
 
         var normalized = RemoveDiacritics(message).ToLowerInvariant();
+        var isGreek = IsGreekMessage(message, detectedLanguage);
         var relativeDate = ResolveRelativeDate(normalized, localNow);
         var explicitTime = ResolveTime(normalized);
         if (relativeDate is not null && explicitTime is null)
-            return new TemporalNormalizationResult(null, detectedLanguage == "el"
+            return new TemporalNormalizationResult(null, isGreek
                 ? "Ποια ακριβώς ώρα θέλεις να γίνει το ραντεβού;"
                 : "What exact time should the appointment start?", true);
 
@@ -74,6 +75,7 @@ public sealed partial class BilingualTemporalNormalizer
         IReadOnlyCollection<AssistantContact>? contacts = null)
     {
         var normalized = RemoveDiacritics(message).ToLowerInvariant();
+        var isGreek = IsGreekMessage(message, detectedLanguage);
         var isGreekRequest = GreekCreateIntent().IsMatch(normalized);
         var isEnglishRequest = EnglishCreateIntent().IsMatch(normalized);
         if (!isGreekRequest && !isEnglishRequest)
@@ -83,7 +85,7 @@ public sealed partial class BilingualTemporalNormalizer
         var time = ResolveTime(normalized);
         if (date is null || time is null)
         {
-            var clarification = detectedLanguage == "el"
+            var clarification = isGreek
                 ? date is null && time is null
                     ? "Ποια ακριβώς ημέρα και ώρα θέλεις να γίνει το ραντεβού;"
                     : date is null ? "Ποια ακριβώς ημέρα θέλεις να γίνει το ραντεβού;" : "Ποια ακριβώς ώρα θέλεις να γίνει το ραντεβού;"
@@ -97,7 +99,7 @@ public sealed partial class BilingualTemporalNormalizer
         if (unlinkedContacts.Count > 0)
         {
             var names = string.Join(", ", unlinkedContacts);
-            return new TemporalNormalizationResult(null, detectedLanguage == "el"
+            return new TemporalNormalizationResult(null, isGreek
                 ? $"Η επαφή {names} δεν έχει ακόμη συνδεδεμένο λογαριασμό Nevma. Για να λάβει notification και να αποδεχτεί το ραντεβού, πρέπει να εγγραφεί με το ίδιο email ή τηλέφωνο."
                 : $"{names} is not linked to a Nevma account yet. They must register with the same email or phone to receive and accept the invitation.");
         }
@@ -108,7 +110,7 @@ public sealed partial class BilingualTemporalNormalizer
             title, message.Trim(), null, startsAt, startsAt.AddHours(1), ResolveParticipantIds(message, contacts));
         var command = new ParsedCommand(
             CommandIntent.CreateCalendarEvent,
-            detectedLanguage == "el" ? $"Δημιουργία: {title}" : $"Create: {title}",
+            isGreek ? $"Δημιουργία: {title}" : $"Create: {title}",
             JsonSerializer.Serialize(arguments, JsonOptions));
         return new TemporalNormalizationResult(command, null);
     }
@@ -122,11 +124,12 @@ public sealed partial class BilingualTemporalNormalizer
         string detectedLanguage,
         IReadOnlyCollection<AssistantContact>? contacts)
     {
+        var isGreek = IsGreekMessage(message, detectedLanguage);
         var unlinkedContacts = ResolveMentionedUnlinkedContacts(message, contacts);
         if (unlinkedContacts.Count > 0)
         {
             var names = string.Join(", ", unlinkedContacts);
-            return new TemporalNormalizationResult(null, detectedLanguage == "el"
+            return new TemporalNormalizationResult(null, isGreek
                 ? $"Η επαφή {names} δεν έχει ακόμη συνδεδεμένο λογαριασμό Nevma. Για να λάβει notification και να αποδεχτεί το ραντεβού, πρέπει να εγγραφεί με το ίδιο email ή τηλέφωνο."
                 : $"{names} is not linked to a Nevma account yet. They must register with the same email or phone to receive and accept the invitation.");
         }
@@ -143,14 +146,14 @@ public sealed partial class BilingualTemporalNormalizer
             EndsAt = endsAt,
             ParticipantIds = participants.Count > 0 ? participants : request.ParticipantIds
         }, JsonOptions);
-        var summary = detectedLanguage == "el" ? $"Δημιουργία: {title}" : $"Create: {title}";
+        var summary = isGreek ? $"Δημιουργία: {title}" : $"Create: {title}";
         return new TemporalNormalizationResult(command with { Summary = summary, ArgumentsJson = json }, null);
     }
 
     private static string ChooseTitle(string? proposedTitle, string message, string detectedLanguage)
     {
         var normalized = RemoveDiacritics(message).ToLowerInvariant();
-        var isGreek = detectedLanguage == "el" || GreekCharacters().IsMatch(message);
+        var isGreek = IsGreekMessage(message, detectedLanguage);
 
         if (normalized.Contains("καφε", StringComparison.Ordinal) || normalized.Contains("coffee", StringComparison.Ordinal))
         {
@@ -428,6 +431,9 @@ public sealed partial class BilingualTemporalNormalizer
                 builder.Append(character);
         return builder.ToString().Normalize(NormalizationForm.FormC);
     }
+
+    private static bool IsGreekMessage(string message, string detectedLanguage) =>
+        detectedLanguage.StartsWith("el", StringComparison.OrdinalIgnoreCase);
 
     private static Regex WholeWord(string value) => new($@"\b{Regex.Escape(value)}\b", RegexOptions.CultureInvariant);
 

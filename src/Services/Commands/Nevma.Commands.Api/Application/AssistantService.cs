@@ -31,21 +31,22 @@ public sealed class AssistantService(
             string.Empty,
             DetectLanguage(request.Message),
             null);
+        var responseLanguage = PreferredLanguage(request.Locale, request.Message, completed.DetectedLanguage);
         CommandResponse? commandResponse = null;
         var proposedCommand = completed.Command;
         string? fallbackReply = null;
         if (proposedCommand is null)
         {
             var fallback = temporalNormalizer.TryCreateFallback(
-                request.Message, localNow, completed.DetectedLanguage, request.Contacts);
+                request.Message, localNow, responseLanguage, request.Contacts);
             proposedCommand = fallback.Command;
             if (proposedCommand is null && fallback.Clarification is not null)
                 return new AssistantResult.Completed(new AssistantResponse(
-                    fallback.Clarification, completed.DetectedLanguage, null, fallback.NeedsMoreInformation));
+                    fallback.Clarification, responseLanguage, null, fallback.NeedsMoreInformation));
             if (proposedCommand is null && unavailable is not null)
                 return new AssistantResult.Unavailable(unavailable.Message);
             if (proposedCommand is not null)
-                fallbackReply = completed.DetectedLanguage == "el"
+                fallbackReply = responseLanguage.StartsWith("el", StringComparison.OrdinalIgnoreCase)
                     ? "Ετοίμασα το ραντεβού. Έλεγξε τα στοιχεία και επιβεβαίωσέ το."
                     : "I prepared the appointment. Review the details and confirm it.";
         }
@@ -53,10 +54,10 @@ public sealed class AssistantService(
         if (proposedCommand is not null)
         {
             var normalization = temporalNormalizer.Normalize(
-                request.Message, proposedCommand, localNow, completed.DetectedLanguage, request.Contacts);
+                request.Message, proposedCommand, localNow, responseLanguage, request.Contacts);
             if (normalization.Command is null)
                 return new AssistantResult.Completed(new AssistantResponse(
-                    normalization.Clarification!, completed.DetectedLanguage, null, normalization.NeedsMoreInformation));
+                    normalization.Clarification!, responseLanguage, null, normalization.NeedsMoreInformation));
 
             var validation = validator.Validate(normalization.Command, localNow);
             if (validation is not ParseResult.Parsed parsed)
@@ -81,12 +82,19 @@ public sealed class AssistantService(
 
         return new AssistantResult.Completed(new AssistantResponse(
             fallbackReply ?? completed.Reply,
-            completed.DetectedLanguage,
+            responseLanguage,
             commandResponse));
     }
 
     private static string DetectLanguage(string message) =>
         message.Any(character => character is >= '\u0370' and <= '\u03ff') ? "el" : "en";
+
+    private static string PreferredLanguage(string? locale, string message, string detectedLanguage)
+    {
+        if (locale?.StartsWith("el", StringComparison.OrdinalIgnoreCase) == true) return "el";
+        if (locale?.StartsWith("en", StringComparison.OrdinalIgnoreCase) == true) return "en";
+        return string.IsNullOrWhiteSpace(detectedLanguage) ? DetectLanguage(message) : detectedLanguage;
+    }
 }
 
 public abstract record AssistantResult
