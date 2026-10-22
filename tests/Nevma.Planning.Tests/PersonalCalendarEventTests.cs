@@ -33,10 +33,28 @@ public sealed class PersonalCalendarEventTests
             Guid.NewGuid(), "Project review", null, null, Now.AddDays(1), Now.AddDays(1).AddHours(1),
             [participant], Now);
 
-        var outcome = appointment.Decline(participant, Now.AddMinutes(1));
+        var outcome = appointment.Decline(participant, "Cannot attend", Now.AddMinutes(1));
 
         Assert.Equal(ParticipantResponseOutcome.Updated, outcome);
         Assert.Equal(PersonalCalendarEventStatus.Declined, appointment.Status);
+        Assert.Equal("Cannot attend", appointment.DeclinedParticipantReasons.Single());
+    }
+
+    [Fact]
+    public void One_decline_does_not_cancel_a_group_appointment_with_an_acceptance()
+    {
+        var maria = Guid.NewGuid();
+        var nikos = Guid.NewGuid();
+        var appointment = PersonalCalendarEvent.Create(
+            Guid.NewGuid(), "Dinner", null, null, Now.AddDays(1), Now.AddDays(1).AddHours(1),
+            [maria, nikos], Now);
+
+        appointment.Accept(maria, Now.AddMinutes(1));
+        appointment.Decline(nikos, "Away", Now.AddMinutes(2));
+
+        Assert.Equal(PersonalCalendarEventStatus.PartiallyAccepted, appointment.Status);
+        Assert.Contains(maria, appointment.AcceptedParticipantIds);
+        Assert.Contains(nikos, appointment.DeclinedParticipantIds);
     }
 
     [Fact]

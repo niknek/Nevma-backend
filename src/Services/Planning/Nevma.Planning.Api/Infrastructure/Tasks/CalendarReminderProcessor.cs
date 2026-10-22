@@ -35,7 +35,7 @@ public sealed class CalendarReminderProcessor(
         var reminderWindowEnd = now.AddHours(1);
         var events = await dbContext.PersonalCalendarEvents
             .Where(item =>
-                item.Status == PersonalCalendarEventStatus.Confirmed &&
+                (item.Status == PersonalCalendarEventStatus.Confirmed || item.Status == PersonalCalendarEventStatus.PartiallyAccepted) &&
                 item.StartsAt > now &&
                 item.StartsAt <= reminderWindowEnd &&
                 item.ReminderDispatchedAt == null)

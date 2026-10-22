@@ -67,15 +67,17 @@ public static class PersonalCalendarEndpoints
             await db.SaveChangesAsync(ct);
             return Results.Ok(item);
         });
-        group.MapPost("/{id:guid}/decline", async (Guid id, HttpContext context, PlanningDbContext db, IPlanningEventOutbox outbox, TimeProvider clock, CancellationToken ct) =>
+        group.MapPost("/{id:guid}/decline", async (Guid id, DeclinePersonalEventRequest request, HttpContext context, PlanningDbContext db, IPlanningEventOutbox outbox, TimeProvider clock, CancellationToken ct) =>
         {
             if (!TryUser(context, out var userId)) return Results.Unauthorized();
             var item = await db.PersonalCalendarEvents.SingleOrDefaultAsync(x => x.Id == id, ct);
             if (item is null) return Results.NotFound();
             var now = clock.GetUtcNow();
-            var outcome = item.Decline(userId, now);
+            var outcome = item.Decline(userId, request.Reason, now);
             if (outcome == ParticipantResponseOutcome.Forbidden) return Results.Forbid();
             if (outcome == ParticipantResponseOutcome.AlreadyHandled) return Results.Conflict(new { message = "Invitation has already been handled." });
+            if (outcome == ParticipantResponseOutcome.InvalidReason)
+                return Results.ValidationProblem(new Dictionary<string, string[]> { ["reason"] = ["The reason must be up to 500 characters."] });
             AddInvitationEvent(outbox, item, userId, MeetingInvitationStatus.Declined, now);
             await db.SaveChangesAsync(ct);
             return Results.Ok(item);
@@ -130,7 +132,7 @@ public static class PersonalCalendarEndpoints
         db.PersonalCalendarEvents.AnyAsync(item =>
             (!excludedEventId.HasValue || item.Id != excludedEventId.Value) &&
             (item.UserId == userId || item.ParticipantIds.Contains(userId)) &&
-            (item.Status == PersonalCalendarEventStatus.Pending || item.Status == PersonalCalendarEventStatus.Confirmed) &&
+            (item.Status == PersonalCalendarEventStatus.Pending || item.Status == PersonalCalendarEventStatus.Confirmed || item.Status == PersonalCalendarEventStatus.PartiallyAccepted) &&
             item.StartsAt < endsAt && item.EndsAt > startsAt,
             ct);
 
@@ -151,3 +153,4 @@ public sealed record PersonalEventRequest(
     IReadOnlyCollection<Guid>? ParticipantIds = null);
 
 public sealed record CancelPersonalEventRequest(string Reason);
+public sealed record DeclinePersonalEventRequest(string? Reason);

@@ -12,6 +12,8 @@ public sealed class PersonalCalendarEvent
     public DateTimeOffset EndsAt { get; private set; }
     public Guid[] ParticipantIds { get; private set; } = [];
     public Guid[] AcceptedParticipantIds { get; private set; } = [];
+    public Guid[] DeclinedParticipantIds { get; private set; } = [];
+    public string[] DeclinedParticipantReasons { get; private set; } = [];
     public PersonalCalendarEventStatus Status { get; private set; } = PersonalCalendarEventStatus.Confirmed;
     public string? CancellationReason { get; private set; }
     public DateTimeOffset? ReminderDispatchedAt { get; private set; }
@@ -46,9 +48,13 @@ public sealed class PersonalCalendarEvent
         Title = title.Trim(); Purpose = purpose?.Trim(); Location = location?.Trim(); StartsAt = startsAt.ToUniversalTime(); EndsAt = endsAt.ToUniversalTime();
         ParticipantIds = (participantIds ?? []).Where(id => id != Guid.Empty && id != UserId).Distinct().ToArray();
         AcceptedParticipantIds = AcceptedParticipantIds.Where(ParticipantIds.Contains).ToArray();
-        Status = ParticipantIds.Length == 0 || AcceptedParticipantIds.Length == ParticipantIds.Length
-            ? PersonalCalendarEventStatus.Confirmed
-            : PersonalCalendarEventStatus.Pending;
+        var retainedDeclines = DeclinedParticipantIds
+            .Select((id, index) => new { Id = id, Reason = index < DeclinedParticipantReasons.Length ? DeclinedParticipantReasons[index] : string.Empty })
+            .Where(item => ParticipantIds.Contains(item.Id))
+            .ToArray();
+        DeclinedParticipantIds = retainedDeclines.Select(item => item.Id).ToArray();
+        DeclinedParticipantReasons = retainedDeclines.Select(item => item.Reason).ToArray();
+        RefreshStatus();
         UpdatedAt = now.ToUniversalTime();
     }
 
@@ -59,6 +65,12 @@ public sealed class PersonalCalendarEvent
     {
         if (Status != PersonalCalendarEventStatus.Pending || StartsAt > now)
             return false;
+        if (AcceptedParticipantIds.Length > 0)
+        {
+            Status = PersonalCalendarEventStatus.PartiallyAccepted;
+            UpdatedAt = now.ToUniversalTime();
+            return false;
+        }
         Status = PersonalCalendarEventStatus.Cancelled;
         CancellationReason = "The appointment was not confirmed before its start time.";
         UpdatedAt = now.ToUniversalTime();
@@ -82,27 +94,43 @@ public sealed class PersonalCalendarEvent
     public ParticipantResponseOutcome Accept(Guid participantId, DateTimeOffset now)
     {
         if (!ParticipantIds.Contains(participantId)) return ParticipantResponseOutcome.Forbidden;
-        if (Status == PersonalCalendarEventStatus.Declined || AcceptedParticipantIds.Contains(participantId))
+        if (Status is PersonalCalendarEventStatus.Declined or PersonalCalendarEventStatus.Cancelled ||
+            AcceptedParticipantIds.Contains(participantId) || DeclinedParticipantIds.Contains(participantId))
             return ParticipantResponseOutcome.AlreadyHandled;
         AcceptedParticipantIds = [.. AcceptedParticipantIds, participantId];
-        Status = AcceptedParticipantIds.Length == ParticipantIds.Length
-            ? PersonalCalendarEventStatus.Confirmed
-            : PersonalCalendarEventStatus.Pending;
+        RefreshStatus();
         UpdatedAt = now.ToUniversalTime();
         return ParticipantResponseOutcome.Updated;
     }
 
-    public ParticipantResponseOutcome Decline(Guid participantId, DateTimeOffset now)
+    public ParticipantResponseOutcome Decline(Guid participantId, string? reason, DateTimeOffset now)
     {
         if (!ParticipantIds.Contains(participantId)) return ParticipantResponseOutcome.Forbidden;
-        if (Status == PersonalCalendarEventStatus.Declined || AcceptedParticipantIds.Contains(participantId))
+        if (Status is PersonalCalendarEventStatus.Declined or PersonalCalendarEventStatus.Cancelled ||
+            AcceptedParticipantIds.Contains(participantId) || DeclinedParticipantIds.Contains(participantId))
             return ParticipantResponseOutcome.AlreadyHandled;
-        Status = PersonalCalendarEventStatus.Declined;
+        var normalizedReason = reason?.Trim() ?? string.Empty;
+        if (normalizedReason.Length > 500) return ParticipantResponseOutcome.InvalidReason;
+        DeclinedParticipantIds = [.. DeclinedParticipantIds, participantId];
+        DeclinedParticipantReasons = [.. DeclinedParticipantReasons, normalizedReason];
+        RefreshStatus();
         UpdatedAt = now.ToUniversalTime();
         return ParticipantResponseOutcome.Updated;
+    }
+
+    private void RefreshStatus()
+    {
+        if (ParticipantIds.Length == 0 || AcceptedParticipantIds.Length == ParticipantIds.Length)
+            Status = PersonalCalendarEventStatus.Confirmed;
+        else if (AcceptedParticipantIds.Length + DeclinedParticipantIds.Length == ParticipantIds.Length)
+            Status = AcceptedParticipantIds.Length > 0
+                ? PersonalCalendarEventStatus.PartiallyAccepted
+                : PersonalCalendarEventStatus.Declined;
+        else
+            Status = PersonalCalendarEventStatus.Pending;
     }
 }
 
-public enum PersonalCalendarEventStatus { Pending, Confirmed, Declined, Cancelled }
-public enum ParticipantResponseOutcome { Updated, Forbidden, AlreadyHandled }
+public enum PersonalCalendarEventStatus { Pending, Confirmed, Declined, Cancelled, PartiallyAccepted }
+public enum ParticipantResponseOutcome { Updated, Forbidden, AlreadyHandled, InvalidReason }
 public enum ManualCancellationOutcome { Updated, InvalidReason, AlreadyHandled, AppointmentStarted }
