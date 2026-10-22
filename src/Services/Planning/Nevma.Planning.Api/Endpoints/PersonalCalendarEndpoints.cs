@@ -24,6 +24,8 @@ public static class PersonalCalendarEndpoints
         {
             if (!TryUser(context, out var userId)) return Results.Unauthorized();
             var validation = ValidateDate(request, clock.GetUtcNow()); if (validation is not null) return validation;
+            if (await HasActiveConflict(db, userId, request.StartsAt, request.EndsAt, null, ct))
+                return ConflictResult();
             var now = clock.GetUtcNow();
             var item = PersonalCalendarEvent.Create(userId, request.Title, request.Purpose, request.Location, request.StartsAt, request.EndsAt, request.ParticipantIds, now);
             db.PersonalCalendarEvents.Add(item);
@@ -37,10 +39,14 @@ public static class PersonalCalendarEndpoints
             if (!TryUser(context, out var userId)) return Results.Unauthorized();
             var item = await db.PersonalCalendarEvents.SingleOrDefaultAsync(x => x.Id == id && x.UserId == userId, ct);
             if (item is null) return Results.NotFound();
+            if (item.Status is PersonalCalendarEventStatus.Cancelled or PersonalCalendarEventStatus.Declined)
+                return Results.Conflict(new { message = "A cancelled or declined appointment cannot be edited." });
             var currentTime = clock.GetUtcNow();
             if (item.StartsAt <= currentTime)
                 return Results.Conflict(new { message = "An appointment that has already started cannot be edited." });
             var validation = ValidateDate(request, currentTime); if (validation is not null) return validation;
+            if (await HasActiveConflict(db, userId, request.StartsAt, request.EndsAt, item.Id, ct))
+                return ConflictResult();
             var previousParticipants = item.ParticipantIds.ToHashSet();
             var now = currentTime;
             item.Update(request.Title, request.Purpose, request.Location, request.StartsAt, request.EndsAt, request.ParticipantIds, now);
@@ -113,6 +119,23 @@ public static class PersonalCalendarEndpoints
         if (request.StartsAt > now.AddYears(10)) return Results.ValidationProblem(new Dictionary<string, string[]> { ["startsAt"] = ["Appointments can be scheduled up to 10 years ahead."] });
         return null;
     }
+
+    private static Task<bool> HasActiveConflict(
+        PlanningDbContext db,
+        Guid userId,
+        DateTimeOffset startsAt,
+        DateTimeOffset endsAt,
+        Guid? excludedEventId,
+        CancellationToken ct) =>
+        db.PersonalCalendarEvents.AnyAsync(item =>
+            (!excludedEventId.HasValue || item.Id != excludedEventId.Value) &&
+            (item.UserId == userId || item.ParticipantIds.Contains(userId)) &&
+            (item.Status == PersonalCalendarEventStatus.Pending || item.Status == PersonalCalendarEventStatus.Confirmed) &&
+            item.StartsAt < endsAt && item.EndsAt > startsAt,
+            ct);
+
+    private static IResult ConflictResult() =>
+        Results.Conflict(new { message = "Another active appointment overlaps this time." });
 
     private static bool TryUser(HttpContext context, out Guid userId) =>
         Guid.TryParse(context.User.FindFirstValue("sub"), out userId) ||
