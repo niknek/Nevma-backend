@@ -283,6 +283,23 @@ public sealed class CommandServiceTests
     }
 
     [Fact]
+    public void Voice_command_recovers_noisy_greek_pm_and_preserves_the_named_place()
+    {
+        var konstantinaId = Guid.NewGuid();
+        var message = "Θέλω να κάνω ένα καφέ με την Κωνσταντίνα μεθαύριο στις 6 ώρα τα πόγευμα στο καφέ Παράτζιο στην Κυψέλη";
+
+        var result = new BilingualTemporalNormalizer().TryCreateFallback(
+            message, Now, "el", [new AssistantContact(konstantinaId, "Konstantina Nika", Guid.NewGuid())]);
+
+        var arguments = JsonSerializer.Deserialize<CreateCalendarEventCommandArguments>(
+            result.Command!.ArgumentsJson, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        Assert.NotNull(arguments);
+        Assert.Equal(new DateTimeOffset(2026, 7, 17, 18, 0, 0, TimeSpan.Zero), arguments.StartsAt);
+        Assert.Equal("καφέ Παράτζιο στην Κυψέλη", arguments.Location);
+        Assert.Equal([konstantinaId], arguments.ParticipantIds);
+    }
+
+    [Fact]
     public void Greek_calendar_fallback_requires_a_clear_intent_and_resolves_the_time()
     {
         var normalizer = new BilingualTemporalNormalizer();

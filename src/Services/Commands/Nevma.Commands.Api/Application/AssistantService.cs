@@ -35,20 +35,27 @@ public sealed class AssistantService(
         CommandResponse? commandResponse = null;
         var proposedCommand = completed.Command;
         string? fallbackReply = null;
-        if (proposedCommand is null)
+        var fallback = temporalNormalizer.TryCreateFallback(
+            request.Message, localNow, responseLanguage, request.Contacts);
+
+        // Prefer the deterministic create parser when the user's words clearly describe
+        // a new appointment. This prevents an AI provider from turning a fresh booking
+        // into an update just because existing calendar context was supplied.
+        if (fallback.Command is not null &&
+            (proposedCommand is null || proposedCommand.Intent == CommandIntent.UpdateCalendarEvent))
         {
-            var fallback = temporalNormalizer.TryCreateFallback(
-                request.Message, localNow, responseLanguage, request.Contacts);
             proposedCommand = fallback.Command;
+            fallbackReply = responseLanguage.StartsWith("el", StringComparison.OrdinalIgnoreCase)
+                ? "Ετοίμασα το ραντεβού. Έλεγξε τα στοιχεία και επιβεβαίωσέ το."
+                : "I prepared the appointment. Review the details and confirm it.";
+        }
+        else if (proposedCommand is null)
+        {
             if (proposedCommand is null && fallback.Clarification is not null)
                 return new AssistantResult.Completed(new AssistantResponse(
                     fallback.Clarification, responseLanguage, null, fallback.NeedsMoreInformation));
             if (proposedCommand is null && unavailable is not null)
                 return new AssistantResult.Unavailable(unavailable.Message);
-            if (proposedCommand is not null)
-                fallbackReply = responseLanguage.StartsWith("el", StringComparison.OrdinalIgnoreCase)
-                    ? "Ετοίμασα το ραντεβού. Έλεγξε τα στοιχεία και επιβεβαίωσέ το."
-                    : "I prepared the appointment. Review the details and confirm it.";
         }
 
         if (proposedCommand is not null)
@@ -80,8 +87,14 @@ public sealed class AssistantService(
             }
         }
 
+        var safeReply = commandResponse is not null
+            ? responseLanguage.StartsWith("el", StringComparison.OrdinalIgnoreCase)
+                ? "Ετοίμασα το ραντεβού. Έλεγξε τα στοιχεία και επιβεβαίωσέ το."
+                : "I prepared the appointment. Review the details and confirm it."
+            : fallbackReply ?? completed.Reply;
+
         return new AssistantResult.Completed(new AssistantResponse(
-            fallbackReply ?? completed.Reply,
+            safeReply,
             responseLanguage,
             commandResponse));
     }
