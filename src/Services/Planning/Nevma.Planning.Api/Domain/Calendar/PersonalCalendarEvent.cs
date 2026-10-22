@@ -56,7 +56,7 @@ public sealed class PersonalCalendarEvent
 
     public bool CancelIfExpired(DateTimeOffset now)
     {
-        if (Status != PersonalCalendarEventStatus.Pending || EndsAt > now)
+        if (Status != PersonalCalendarEventStatus.Pending || StartsAt > now)
             return false;
         Status = PersonalCalendarEventStatus.Cancelled;
         UpdatedAt = now.ToUniversalTime();

@@ -15,8 +15,8 @@ public sealed class CalendarReminderProcessor(
     {
         var now = timeProvider.GetUtcNow();
         var expired = await dbContext.PersonalCalendarEvents
-            .Where(item => item.Status == PersonalCalendarEventStatus.Pending && item.EndsAt <= now)
-            .OrderBy(item => item.EndsAt)
+            .Where(item => item.Status == PersonalCalendarEventStatus.Pending && item.StartsAt <= now)
+            .OrderBy(item => item.StartsAt)
             .Take(batchSize)
             .ToListAsync(cancellationToken);
         foreach (var item in expired)

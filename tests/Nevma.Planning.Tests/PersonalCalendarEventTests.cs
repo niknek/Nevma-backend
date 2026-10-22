@@ -46,8 +46,8 @@ public sealed class PersonalCalendarEventTests
             Guid.NewGuid(), "Coffee", null, null, Now.AddMinutes(10), Now.AddMinutes(40),
             [Guid.NewGuid()], Now);
 
-        Assert.False(appointment.CancelIfExpired(Now.AddMinutes(39)));
-        Assert.True(appointment.CancelIfExpired(Now.AddMinutes(40)));
+        Assert.False(appointment.CancelIfExpired(Now.AddMinutes(9)));
+        Assert.True(appointment.CancelIfExpired(Now.AddMinutes(10)));
         Assert.Equal(PersonalCalendarEventStatus.Cancelled, appointment.Status);
     }
 }
