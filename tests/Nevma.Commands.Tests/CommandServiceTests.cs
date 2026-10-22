@@ -223,6 +223,30 @@ public sealed class CommandServiceTests
         Assert.Equal(arguments.StartsAt.AddHours(1), arguments.EndsAt);
     }
 
+    [Theory]
+    [InlineData("Θέλω καφέ με την Κωνσταντίνα μεθαύριο στις τέσσερα μισή ώρα το απόγευμα", "el", 16, 30)]
+    [InlineData("Κλείσε ραντεβού αύριο στις τεσσεράμισι το απόγευμα", "el", 16, 30)]
+    [InlineData("Κλείσε ραντεβού αύριο στις τέσσερις και τέταρτο το απόγευμα", "el", 16, 15)]
+    [InlineData("Κλείσε ραντεβού αύριο στις πέντε παρά πέντε το απόγευμα", "el", 16, 55)]
+    [InlineData("Κλείσε ραντεβού αύριο στις δεκατέσσερις και τριάντα", "el", 14, 30)]
+    [InlineData("Book an appointment tomorrow at four thirty PM", "en", 16, 30)]
+    [InlineData("Book an appointment tomorrow at fourteen thirty", "en", 14, 30)]
+    [InlineData("Book an appointment tomorrow at quarter past four in the afternoon", "en", 16, 15)]
+    [InlineData("Book an appointment tomorrow at five to five PM", "en", 16, 55)]
+    [InlineData("Book an appointment tomorrow at 4:30 PM", "en", 16, 30)]
+    public void Temporal_normalizer_understands_common_spoken_time_formats(
+        string message, string language, int expectedHour, int expectedMinute)
+    {
+        var result = new BilingualTemporalNormalizer().TryCreateFallback(message, Now, language);
+
+        Assert.NotNull(result.Command);
+        var arguments = JsonSerializer.Deserialize<CreateCalendarEventCommandArguments>(
+            result.Command.ArgumentsJson, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        Assert.NotNull(arguments);
+        Assert.Equal(expectedHour, arguments.StartsAt.Hour);
+        Assert.Equal(expectedMinute, arguments.StartsAt.Minute);
+    }
+
     [Fact]
     public void Greek_calendar_fallback_requires_a_clear_intent_and_resolves_the_time()
     {

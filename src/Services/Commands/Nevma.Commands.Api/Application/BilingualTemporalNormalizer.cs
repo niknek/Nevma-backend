@@ -20,6 +20,22 @@ public sealed partial class BilingualTemporalNormalizer
         ["saturday"] = DayOfWeek.Saturday, ["σαββατο"] = DayOfWeek.Saturday,
         ["sunday"] = DayOfWeek.Sunday, ["κυριακη"] = DayOfWeek.Sunday
     };
+    private static readonly IReadOnlyDictionary<string, int> SpokenHours = new Dictionary<string, int>
+    {
+        ["one"] = 1, ["two"] = 2, ["three"] = 3, ["four"] = 4, ["five"] = 5, ["six"] = 6,
+        ["seven"] = 7, ["eight"] = 8, ["nine"] = 9, ["ten"] = 10, ["eleven"] = 11, ["twelve"] = 12,
+        ["thirteen"] = 13, ["fourteen"] = 14, ["fifteen"] = 15, ["sixteen"] = 16,
+        ["seventeen"] = 17, ["eighteen"] = 18, ["nineteen"] = 19, ["twenty"] = 20,
+        ["twenty one"] = 21, ["twenty two"] = 22, ["twenty three"] = 23,
+        ["μια"] = 1, ["ενα"] = 1, ["δυο"] = 2, ["τρεις"] = 3, ["τρια"] = 3,
+        ["τεσσερις"] = 4, ["τεσσερα"] = 4, ["πεντε"] = 5, ["εξι"] = 6,
+        ["επτα"] = 7, ["εφτα"] = 7, ["οκτω"] = 8, ["οχτω"] = 8, ["εννια"] = 9,
+        ["δεκα"] = 10, ["εντεκα"] = 11, ["δωδεκα"] = 12, ["δεκατρεις"] = 13,
+        ["δεκατεσσερις"] = 14, ["δεκατεσσερα"] = 14, ["δεκαπεντε"] = 15, ["δεκαεξι"] = 16,
+        ["δεκαεπτα"] = 17, ["δεκαεφτα"] = 17, ["δεκαοκτω"] = 18, ["δεκαοχτω"] = 18,
+        ["δεκαεννια"] = 19, ["εικοσι"] = 20, ["εικοσι μια"] = 21, ["εικοσι ενα"] = 21,
+        ["εικοσι δυο"] = 22, ["εικοσι τρεις"] = 23, ["εικοσι τρια"] = 23
+    };
 
     public TemporalNormalizationResult Normalize(
         string message,
@@ -304,7 +320,7 @@ public sealed partial class BilingualTemporalNormalizer
     {
         var match = TwentyFourHourTime().Match(text);
         if (match.Success)
-            return new TimeOnly(Parse(match, "hour"), Parse(match, "minute"));
+            return ApplySpokenPeriod(Parse(match, "hour"), Parse(match, "minute"), match.Groups["period"].Value);
 
         match = EnglishTime().Match(text);
         if (match.Success)
@@ -324,6 +340,34 @@ public sealed partial class BilingualTemporalNormalizer
             return new TimeOnly(hour, ParseOptional(match, "minute"));
         }
 
+        match = EnglishHalfPastTime().Match(text);
+        if (match.Success)
+            return ResolveRelativeSpokenTime(match, 30);
+
+        match = EnglishRelativeTime().Match(text);
+        if (match.Success)
+            return ResolveRelativeSpokenTime(match, SpokenMinute(match.Groups["minute"].Value));
+
+        match = EnglishSpokenTime().Match(text);
+        if (match.Success)
+        {
+            var minute = SpokenMinute(match.Groups["minute"].Value);
+            return ApplySpokenPeriod(SpokenHours[match.Groups["hourword"].Value], minute, match.Groups["period"].Value);
+        }
+
+        match = GreekSpokenTime().Match(text);
+        if (match.Success)
+        {
+            var minute = SpokenMinute(match.Groups["minute"].Value);
+            var hour = SpokenHours[match.Groups["hourword"].Value];
+            if (match.Groups["before"].Success)
+            {
+                hour = (hour + 23) % 24;
+                minute = 60 - minute;
+            }
+            return ApplySpokenPeriod(hour, minute, match.Groups["period"].Value);
+        }
+
         if (text.Contains("morning", StringComparison.Ordinal) || text.Contains("πρωι", StringComparison.Ordinal))
             return new TimeOnly(9, 0);
         if (text.Contains("noon", StringComparison.Ordinal) || text.Contains("μεσημερι", StringComparison.Ordinal))
@@ -334,6 +378,43 @@ public sealed partial class BilingualTemporalNormalizer
             return new TimeOnly(20, 0);
         return null;
     }
+
+    private static TimeOnly ApplySpokenPeriod(int hour, int minute, string period)
+    {
+        var normalizedPeriod = period.Replace(".", string.Empty, StringComparison.Ordinal);
+        if ((normalizedPeriod is "pm" or "afternoon" or "evening" or "απογευμα" or "βραδυ" or "μμ") && hour < 12)
+            hour += 12;
+        if ((normalizedPeriod is "am" or "morning" or "πρωι" or "πμ") && hour == 12)
+            hour = 0;
+        return new TimeOnly(hour, minute);
+    }
+
+    private static TimeOnly ResolveRelativeSpokenTime(Match match, int minute)
+    {
+        var hour = SpokenHours[match.Groups["hourword"].Value];
+        if (match.Groups["before"].Success)
+        {
+            hour = (hour + 23) % 24;
+            minute = 60 - minute;
+        }
+        return ApplySpokenPeriod(hour, minute, match.Groups["period"].Value);
+    }
+
+    private static int SpokenMinute(string value) => value.Trim() switch
+    {
+        "five" or "πεντε" => 5,
+        "ten" or "δεκα" => 10,
+        "quarter" or "fifteen" or "τεταρτο" or "δεκαπεντε" => 15,
+        "twenty" or "εικοσι" => 20,
+        "twenty five" or "εικοσι πεντε" => 25,
+        "half" or "thirty" or "μιση" or "μισι" or "τριαντα" => 30,
+        "thirty five" or "τριαντα πεντε" => 35,
+        "forty" or "σαραντα" => 40,
+        "forty five" or "σαραντα πεντε" => 45,
+        "fifty" or "πενηντα" => 50,
+        "fifty five" or "πενηντα πεντε" => 55,
+        _ => 0
+    };
 
     private static int Parse(Match match, string group) => int.Parse(match.Groups[group].Value, CultureInfo.InvariantCulture);
     private static int ParseOptional(Match match, string group) => match.Groups[group].Success ? Parse(match, group) : 0;
@@ -350,7 +431,7 @@ public sealed partial class BilingualTemporalNormalizer
 
     private static Regex WholeWord(string value) => new($@"\b{Regex.Escape(value)}\b", RegexOptions.CultureInvariant);
 
-    [GeneratedRegex(@"(?<!\d)(?<hour>[01]?\d|2[0-3])[:.](?<minute>[0-5]\d)(?!\d)", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"(?<!\d)(?<hour>[01]?\d|2[0-3])[:.](?<minute>[0-5]\d)(?!\d)(?:\s*(?:in\s+the\s+|το\s+)?(?<period>morning|afternoon|evening|a\.?m\.?|p\.?m\.?|πρωι|μεσημερι|απογευμα|βραδυ|π\.?μ\.?|μ\.?μ\.?))?", RegexOptions.CultureInvariant)]
     private static partial Regex TwentyFourHourTime();
 
     [GeneratedRegex(@"\b(?:at\s*)?(?<hour>1[0-2]|0?[1-9])(?::(?<minute>[0-5]\d))?\s*(?<period>a\.?m\.?|p\.?m\.?)\b", RegexOptions.CultureInvariant)]
@@ -358,6 +439,18 @@ public sealed partial class BilingualTemporalNormalizer
 
     [GeneratedRegex(@"\bστις\s+(?<hour>1[0-2]|0?[1-9])(?::(?<minute>[0-5]\d))?(?:\s*(?:το|τη|την)?\s*(?<period>πρωι|μεσημερι|απογευμα|βραδυ|π\.?μ\.?|μ\.?μ\.?))?", RegexOptions.CultureInvariant)]
     private static partial Regex GreekTime();
+
+    [GeneratedRegex(@"\b(?<minute>half)\s+(?:(?<before>to)|past)\s+(?<hourword>one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)(?:\s+(?:in\s+the\s+)?(?<period>morning|afternoon|evening|a\.?m\.?|p\.?m\.?))?\b", RegexOptions.CultureInvariant)]
+    private static partial Regex EnglishHalfPastTime();
+
+    [GeneratedRegex(@"\b(?<minute>five|ten|quarter|fifteen|twenty|twenty\s+five)\s+(?:(?<before>to)|past)\s+(?<hourword>one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)(?:\s+(?:in\s+the\s+)?(?<period>morning|afternoon|evening|a\.?m\.?|p\.?m\.?))?\b", RegexOptions.CultureInvariant)]
+    private static partial Regex EnglishRelativeTime();
+
+    [GeneratedRegex(@"\bat\s+(?<hourword>twenty\s+(?:one|two|three)|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)(?:\s+(?<minute>five|ten|quarter|fifteen|twenty(?:\s+five)?|half|thirty(?:\s+five)?|forty(?:\s+five)?|fifty(?:\s+five)?))?(?:\s+(?:in\s+the\s+)?(?<period>morning|afternoon|evening|a\.?m\.?|p\.?m\.?))?\b", RegexOptions.CultureInvariant)]
+    private static partial Regex EnglishSpokenTime();
+
+    [GeneratedRegex(@"\bστις\s+(?<hourword>εικοσι\s+(?:μια|ενα|δυο|τρεις|τρια)|δεκα(?:τρεις|τεσσερις|τεσσερα|πεντε|εξι|επτα|εφτα|οκτω|οχτω|εννια)|μια|ενα|δυο|τρεις|τρια|τεσσερις|τεσσερα|πεντε|εξι|επτα|εφτα|οκτω|οχτω|εννια|δεκα|εντεκα|δωδεκα|εικοσι)(?:(?:\s+και\s*|\s*)(?<minute>πεντε|δεκα|τεταρτο|δεκαπεντε|εικοσι(?:\s+πεντε)?|μιση|μισι|τριαντα(?:\s+πεντε)?|σαραντα(?:\s+πεντε)?|πενηντα(?:\s+πεντε)?)|\s+(?<before>παρα)\s+(?<minute>πεντε|δεκα|τεταρτο|δεκαπεντε|εικοσι(?:\s+πεντε)?))?(?:\s+ωρα)?(?:\s+(?:το|τη|την)?\s*(?<period>πρωι|μεσημερι|απογευμα|βραδυ|π\.?μ\.?|μ\.?μ\.?))?\b", RegexOptions.CultureInvariant)]
+    private static partial Regex GreekSpokenTime();
 
     [GeneratedRegex(@"\b(?:κλεισε|προσθεσε|βαλε|δημιουργησε|προγραμματισε)\b.{0,80}\b(?:ραντεβου|συναντηση|γεγονος|καφε)\b|\b(?:ραντεβου|συναντηση|γεγονος|καφε)\b.{0,80}\b(?:αυριο|σημερα|μεθαυριο|δευτερα|τριτη|τεταρτη|πεμπτη|παρασκευη|σαββατο|κυριακη)\b", RegexOptions.CultureInvariant)]
     private static partial Regex GreekCreateIntent();
