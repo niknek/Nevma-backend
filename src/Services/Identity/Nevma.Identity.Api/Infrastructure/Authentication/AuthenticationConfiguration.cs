@@ -56,7 +56,7 @@ public static class AuthenticationConfiguration
                 });
             });
 
-        AddExternalProviders(services, configuration);
+        AddExternalProviders(services, configuration, environment);
 
         services.AddAuthorization();
         services.AddAntiforgery(options =>
@@ -122,7 +122,10 @@ public static class AuthenticationConfiguration
         return services;
     }
 
-    private static void AddExternalProviders(IServiceCollection services, IConfiguration configuration)
+    private static void AddExternalProviders(
+        IServiceCollection services,
+        IConfiguration configuration,
+        IWebHostEnvironment environment)
     {
         var googleClientId = configuration["Authentication:Google:ClientId"];
         var googleClientSecret = configuration["Authentication:Google:ClientSecret"];
@@ -138,6 +141,24 @@ public static class AuthenticationConfiguration
 
         var facebookAppId = configuration["Authentication:Facebook:AppId"];
         var facebookAppSecret = configuration["Authentication:Facebook:AppSecret"];
+
+        if (!environment.IsDevelopment())
+        {
+            if (string.IsNullOrWhiteSpace(googleClientId) || string.IsNullOrWhiteSpace(googleClientSecret))
+                throw new InvalidOperationException("Google authentication credentials must be configured outside Development.");
+            if (string.IsNullOrWhiteSpace(facebookAppId) || string.IsNullOrWhiteSpace(facebookAppSecret))
+                throw new InvalidOperationException("Facebook authentication credentials must be configured outside Development.");
+
+            var returnUrls = configuration
+                .GetSection("Authentication:AllowedExternalReturnUrls")
+                .Get<string[]>() ?? [];
+            if (returnUrls.Length == 0 || returnUrls.Any(url =>
+                    !Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
+                    !string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException(
+                    "Authentication:AllowedExternalReturnUrls must contain only absolute HTTPS URLs outside Development.");
+        }
+
         if (!string.IsNullOrWhiteSpace(facebookAppId) && !string.IsNullOrWhiteSpace(facebookAppSecret))
         {
             services.AddAuthentication().AddFacebook("Facebook", options =>

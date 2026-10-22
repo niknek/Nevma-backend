@@ -76,6 +76,11 @@ services:
     command: ["Nevma.Identity.Api.dll"]
     environment:
       <<: [*common-environment, *database-environment]
+      Authentication__Google__ClientId: ${GOOGLE_CLIENT_ID:?Set GOOGLE_CLIENT_ID}
+      Authentication__Google__ClientSecret: ${GOOGLE_CLIENT_SECRET:?Set GOOGLE_CLIENT_SECRET}
+      Authentication__Facebook__AppId: ${FACEBOOK_APP_ID:?Set FACEBOOK_APP_ID}
+      Authentication__Facebook__AppSecret: ${FACEBOOK_APP_SECRET:?Set FACEBOOK_APP_SECRET}
+      Authentication__AllowedExternalReturnUrls__0: ${NEVMA_APP_ORIGIN:?Set NEVMA_APP_ORIGIN}
       Authentication__SigningCertificatePath: /certificates/signing.pfx
       Authentication__SigningCertificatePassword: ${IDENTITY_SIGNING_CERTIFICATE_PASSWORD:?Set IDENTITY_SIGNING_CERTIFICATE_PASSWORD}
       Authentication__EncryptionCertificatePath: /certificates/encryption.pfx

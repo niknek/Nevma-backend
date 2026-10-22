@@ -1,6 +1,12 @@
 using System.Net;
 using System.Net.Http.Json;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Hosting;
 using Nevma.Contracts.Identity;
 using Nevma.Identity.Api.Infrastructure.Authentication;
 
@@ -65,6 +71,45 @@ public sealed class IdentityApiTests
         var response = await client.GetAsync("/account/external/google?returnUrl=http%3A%2F%2Flocalhost%3A5173%2F");
 
         Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task External_login_exchange_accepts_only_a_valid_short_lived_server_token()
+    {
+        using var factory = new IdentityApiFactory();
+        using var client = CreateClient(factory);
+        var expectedUserId = Guid.NewGuid();
+        var dataProtectionProvider = factory.Services.GetRequiredService<IDataProtectionProvider>();
+        var loginToken = dataProtectionProvider
+            .CreateProtector("Nevma.Identity.ExternalLogin.v1")
+            .ToTimeLimitedDataProtector()
+            .Protect(expectedUserId.ToString("D"), TimeSpan.FromMinutes(1));
+
+        var validResponse = await client.PostAsJsonAsync(
+            "/account/external/exchange",
+            new { loginToken });
+        var session = await validResponse.Content.ReadFromJsonAsync<ExternalLoginSession>();
+        var invalidResponse = await client.PostAsJsonAsync(
+            "/account/external/exchange",
+            new { loginToken = "not-a-valid-token" });
+
+        Assert.Equal(HttpStatusCode.OK, validResponse.StatusCode);
+        Assert.NotNull(session);
+        Assert.True(session.Authenticated);
+        Assert.Equal(expectedUserId, session.UserId);
+        Assert.Equal(HttpStatusCode.Unauthorized, invalidResponse.StatusCode);
+    }
+
+    [Fact]
+    public void Production_authentication_fails_closed_without_social_credentials()
+    {
+        var services = new ServiceCollection();
+        var configuration = new ConfigurationBuilder().Build();
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            services.AddNevmaAuthentication(configuration, new ProductionEnvironment()));
+
+        Assert.Contains("Google authentication credentials", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -164,4 +209,16 @@ public sealed class IdentityApiTests
         });
 
     private sealed record ExternalProviderStatus(string Provider, bool IsConfigured, string? Message);
+
+    private sealed record ExternalLoginSession(bool Authenticated, Guid UserId);
+
+    private sealed class ProductionEnvironment : IWebHostEnvironment
+    {
+        public string ApplicationName { get; set; } = "Nevma.Identity.Tests";
+        public IFileProvider WebRootFileProvider { get; set; } = new NullFileProvider();
+        public string WebRootPath { get; set; } = string.Empty;
+        public string EnvironmentName { get; set; } = Environments.Production;
+        public string ContentRootPath { get; set; } = Directory.GetCurrentDirectory();
+        public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
+    }
 }

@@ -1,14 +1,19 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.WebUtilities;
 using Nevma.Identity.Api.Domain.Users;
+using Nevma.Identity.Api.Infrastructure.Authentication;
 using Nevma.Identity.Api.Infrastructure.Persistence;
 
 namespace Nevma.Identity.Api.Endpoints;
 
 public static class ExternalAuthenticationEndpoints
 {
+    private const string ExternalLoginProtectorPurpose = "Nevma.Identity.ExternalLogin.v1";
+    private static readonly TimeSpan ExternalLoginLifetime = TimeSpan.FromMinutes(2);
+
     public static IEndpointRouteBuilder MapExternalAuthenticationEndpoints(
         this IEndpointRouteBuilder endpoints)
     {
@@ -53,6 +58,7 @@ public static class ExternalAuthenticationEndpoints
             SignInManager<IdentityAccount> signInManager,
             IdentityDbContext dbContext,
             TimeProvider timeProvider,
+            IDataProtectionProvider dataProtectionProvider,
             IConfiguration configuration,
             IHostEnvironment environment,
             CancellationToken cancellationToken) =>
@@ -108,13 +114,40 @@ public static class ExternalAuthenticationEndpoints
             await signInManager.SignInAsync(account, isPersistent: false);
             await context.SignOutAsync(IdentityConstants.ExternalScheme);
             var destination = NormalizeReturnUrl(returnUrl, configuration, environment);
+            var loginToken = dataProtectionProvider
+                .CreateProtector(ExternalLoginProtectorPurpose)
+                .ToTimeLimitedDataProtector()
+                .Protect(account.Id.ToString("D"), ExternalLoginLifetime);
             destination = QueryHelpers.AddQueryString(destination, new Dictionary<string, string?>
             {
-                ["signedIn"] = "1",
-                ["userId"] = account.Id.ToString()
+                ["externalLogin"] = loginToken
             });
             return Results.Redirect(destination);
         });
+
+        account.MapPost("/external/exchange", (
+            ExternalLoginExchangeRequest request,
+            IDataProtectionProvider dataProtectionProvider) =>
+        {
+            if (string.IsNullOrWhiteSpace(request.LoginToken))
+                return Results.Unauthorized();
+
+            try
+            {
+                var userIdValue = dataProtectionProvider
+                    .CreateProtector(ExternalLoginProtectorPurpose)
+                    .ToTimeLimitedDataProtector()
+                    .Unprotect(request.LoginToken);
+                return Guid.TryParse(userIdValue, out var userId)
+                    ? Results.Ok(new { authenticated = true, userId })
+                    : Results.Unauthorized();
+            }
+            catch (System.Security.Cryptography.CryptographicException)
+            {
+                return Results.Unauthorized();
+            }
+        })
+        .RequireRateLimiting(AuthenticationConfiguration.AuthenticationRateLimitPolicy);
 
         return endpoints;
     }
@@ -168,4 +201,6 @@ public static class ExternalAuthenticationEndpoints
         string.Equals(requested.AbsolutePath.TrimEnd('/'), allowedUri.AbsolutePath.TrimEnd('/'), StringComparison.OrdinalIgnoreCase);
 
     private sealed record ExternalProviderResponse(string Provider, bool IsConfigured, string? Message);
+
+    public sealed record ExternalLoginExchangeRequest(string LoginToken);
 }
