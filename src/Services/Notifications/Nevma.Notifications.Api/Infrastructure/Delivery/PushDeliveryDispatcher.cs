@@ -72,6 +72,7 @@ public sealed class PushDeliveryDispatcher(
                 {
                     var target = tokenProtector.Unprotect(workItem.Device.ProtectedToken);
                     var result = await sender.SendAsync(
+                        (Nevma.Contracts.Notifications.PushPlatform)(int)workItem.Device.Platform,
                         target,
                         workItem.Notification.Title,
                         workItem.Notification.Body,

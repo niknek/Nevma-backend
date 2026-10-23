@@ -1,8 +1,11 @@
+using Nevma.Contracts.Notifications;
+
 namespace Nevma.Notifications.Api.Application.Delivery;
 
 public interface IPushNotificationSender
 {
     Task<PushSendResult> SendAsync(
+        PushPlatform platform,
         string target,
         string title,
         string body,

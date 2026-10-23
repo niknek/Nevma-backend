@@ -43,5 +43,6 @@ public sealed record UpdateNotificationPreferenceRequest(
 public enum PushPlatform
 {
     Android,
-    Ios
+    Ios,
+    Web
 }

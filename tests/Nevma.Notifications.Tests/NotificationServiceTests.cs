@@ -32,6 +32,22 @@ public sealed class NotificationServiceTests
     }
 
     [Fact]
+    public async Task Web_push_subscription_can_be_registered()
+    {
+        await using var context = CreateContext();
+        var service = CreatePushDeviceService(context);
+        var subscription = "{\"endpoint\":\"https://push.example.test/subscription\",\"keys\":{\"p256dh\":\"key\",\"auth\":\"secret\"}}";
+
+        var result = await service.RegisterAsync(
+            Guid.NewGuid(),
+            new RegisterPushDeviceRequest("browser-1", PushPlatform.Web, subscription));
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(PushPlatform.Web, result.Device!.Platform);
+        Assert.Equal((int)PushPlatform.Web, (int)(await context.PushDevices.SingleAsync()).Platform);
+    }
+
+    [Fact]
     public async Task Re_registering_a_device_refreshes_it_without_a_duplicate()
     {
         await using var context = CreateContext();

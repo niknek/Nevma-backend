@@ -78,7 +78,7 @@ public static class DependencyInjection
             configuration.GetSection(PushDeliveryOptions.SectionName));
         if (pushOptions.Enabled)
         {
-            services.AddSingleton<IPushNotificationSender, FirebasePushNotificationSender>();
+            services.AddSingleton<IPushNotificationSender, MultiPlatformPushNotificationSender>();
             services.AddHostedService<PushDeliveryDispatcher>();
         }
         return services;

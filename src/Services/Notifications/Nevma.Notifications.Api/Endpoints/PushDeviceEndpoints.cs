@@ -1,6 +1,8 @@
 using System.Security.Claims;
 using Nevma.Contracts.Notifications;
 using Nevma.Notifications.Api.Application.PushDevices;
+using Microsoft.Extensions.Options;
+using Nevma.Notifications.Api.Infrastructure.Delivery;
 
 namespace Nevma.Notifications.Api.Endpoints;
 
@@ -11,6 +13,11 @@ public static class PushDeviceEndpoints
         var devices = endpoints.MapGroup("/api/push-devices")
             .RequireAuthorization()
             .WithTags("Push devices");
+
+        devices.MapGet("/web-config", (IOptions<PushDeliveryOptions> options) =>
+            options.Value.WebPush.Enabled && !string.IsNullOrWhiteSpace(options.Value.WebPush.PublicKey)
+                ? Results.Ok(new { publicKey = options.Value.WebPush.PublicKey })
+                : Results.NotFound());
 
         devices.MapPost("/", async (
             RegisterPushDeviceRequest request,

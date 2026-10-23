@@ -72,5 +72,6 @@ public sealed class PushDevice
 public enum PushPlatform
 {
     Android,
-    Ios
+    Ios,
+    Web
 }
