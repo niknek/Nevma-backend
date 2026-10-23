@@ -56,7 +56,8 @@ public sealed record MessageReactionResponse(
 
 public sealed record MessagePageResponse(
     IReadOnlyCollection<MessageResponse> Items,
-    long? NextBefore);
+    long? NextBefore,
+    IReadOnlyCollection<MessageReceiptResponse>? Receipts = null);
 
 public enum ConversationKind
 {

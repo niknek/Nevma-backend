@@ -16,6 +16,9 @@ public interface IMessageRepository
         Guid userId,
         CancellationToken cancellationToken = default);
     Task AddReceiptAsync(MessageReceipt receipt, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<MessageReceipt>> ListReceiptsAsync(
+        IReadOnlyCollection<Guid> messageIds,
+        CancellationToken cancellationToken = default);
     Task<MessageReaction?> GetReactionAsync(
         Guid messageId,
         Guid userId,

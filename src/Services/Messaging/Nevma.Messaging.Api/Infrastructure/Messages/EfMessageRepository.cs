@@ -46,6 +46,13 @@ public sealed class EfMessageRepository(MessagingDbContext dbContext) : IMessage
         CancellationToken cancellationToken = default) =>
         await dbContext.MessageReceipts.AddAsync(receipt, cancellationToken);
 
+    public async Task<IReadOnlyList<MessageReceipt>> ListReceiptsAsync(
+        IReadOnlyCollection<Guid> messageIds,
+        CancellationToken cancellationToken = default) =>
+        await dbContext.MessageReceipts.AsNoTracking()
+            .Where(receipt => messageIds.Contains(receipt.MessageId))
+            .ToListAsync(cancellationToken);
+
     public Task<MessageReaction?> GetReactionAsync(
         Guid messageId,
         Guid userId,

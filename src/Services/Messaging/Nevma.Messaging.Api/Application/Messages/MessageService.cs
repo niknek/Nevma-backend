@@ -29,9 +29,11 @@ public sealed class MessageService(
             cancellationToken);
         var hasMore = messages.Count > pageSize;
         var items = messages.Take(pageSize).Select(ToResponse).ToArray();
+        var receipts = await messageRepository.ListReceiptsAsync(items.Select(item => item.Id).ToArray(), cancellationToken);
         return new MessagePageResponse(
             items,
-            hasMore ? items[^1].Sequence : null);
+            hasMore ? items[^1].Sequence : null,
+            receipts.Select(receipt => new MessageReceiptResponse(receipt.MessageId, receipt.UserId, receipt.DeliveredAt, receipt.ReadAt)).ToArray());
     }
 
     public async Task<SendMessageResult> SendAsync(
