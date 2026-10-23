@@ -19,3 +19,4 @@ secrets/
 *.pem
 *.key
 .local/
+src/Services/Files/Nevma.Files.Api/App_Data/
