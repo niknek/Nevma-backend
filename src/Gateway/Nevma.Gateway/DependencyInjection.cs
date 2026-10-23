@@ -27,7 +27,7 @@ public static class DependencyInjection
                 context.Request.Path.StartsWithSegments("/health")
                     ? RateLimitPartition.GetNoLimiter("health")
                     : RateLimitPartition.GetFixedWindowLimiter(
-                        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                        GetRateLimitPartition(context),
                         _ => new FixedWindowRateLimiterOptions
                         {
                             PermitLimit = 120,
@@ -46,6 +46,14 @@ public static class DependencyInjection
         AddServiceClient(services, configuration, "Files");
 
         return services;
+    }
+
+    private static string GetRateLimitPartition(HttpContext context)
+    {
+        var developmentUserId = context.Request.Headers["X-Nevma-User-Id"].ToString();
+        return Guid.TryParse(developmentUserId, out var userId)
+            ? $"user:{userId:N}"
+            : $"ip:{context.Connection.RemoteIpAddress?.ToString() ?? "unknown"}";
     }
 
     private static void AddServiceClient(
