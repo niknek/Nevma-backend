@@ -165,7 +165,8 @@ public static class PersonalCalendarEndpoints
             responseReason,
             item.AcceptedParticipantIds.Length,
             item.ParticipantIds.Length - item.AcceptedParticipantIds.Length - item.DeclinedParticipantIds.Length,
-            item.DeclinedParticipantIds.Length));
+            item.DeclinedParticipantIds.Length,
+            item.LiveLocationSharingUserIds.Contains(item.UserId)));
 
     private static IResult? ValidateDate(PersonalEventRequest request, DateTimeOffset now)
     {

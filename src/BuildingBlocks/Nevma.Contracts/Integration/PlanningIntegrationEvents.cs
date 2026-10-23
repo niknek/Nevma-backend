@@ -20,7 +20,8 @@ public sealed record MeetingInvitationChangedIntegrationEvent(
     string? ResponseReason = null,
     int? AcceptedCount = null,
     int? PendingCount = null,
-    int? DeclinedCount = null);
+    int? DeclinedCount = null,
+    bool OrganizerSharesLiveLocation = false);
 
 public sealed record TaskReminderDueIntegrationEvent(
     Guid EventId,

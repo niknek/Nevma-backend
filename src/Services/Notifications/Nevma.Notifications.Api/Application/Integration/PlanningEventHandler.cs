@@ -207,7 +207,9 @@ public sealed class PlanningEventHandler(
 
     private static (string Title, string Body) GetPrivacySafeContent(MeetingInvitationChangedIntegrationEvent integrationEvent) => integrationEvent.Status switch
     {
-        MeetingInvitationStatus.Pending => ("New meeting invitation", "Do you accept this meeting? Open Nevma to respond."),
+        MeetingInvitationStatus.Pending => ("New meeting invitation", integrationEvent.OrganizerSharesLiveLocation
+            ? "The organizer enabled live location. Open Nevma to accept the meeting and choose whether to share your location too."
+            : "Do you accept this meeting? Open Nevma to respond."),
         MeetingInvitationStatus.Accepted => ("Meeting accepted", integrationEvent.PendingCount > 0
             ? $"A participant accepted the meeting. {integrationEvent.PendingCount} participant(s) have not responded yet."
             : "A participant accepted the meeting."),
