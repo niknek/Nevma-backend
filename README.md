@@ -182,6 +182,21 @@ $env:PushDelivery__Enabled="true"
 $env:PushDelivery__ProjectId="<firebase-project-id>"
 ```
 
+Browser and installed PWA notifications use Web Push with VAPID. Generate a dedicated VAPID key
+pair for each deployed environment, keep the private key in the host's secret store, and configure:
+
+```powershell
+$env:PushDelivery__Enabled="true"
+$env:PushDelivery__WebPush__Enabled="true"
+$env:PushDelivery__WebPush__Subject="mailto:operations@example.com"
+$env:PushDelivery__WebPush__PublicKey="<vapid-public-key>"
+$env:PushDelivery__WebPush__PrivateKey="<vapid-private-key>"
+```
+
+Web Push requires the frontend and Gateway to be served over HTTPS (localhost is the only browser
+development exception). On iPhone, the user must add the PWA to the Home Screen before enabling
+notifications in the app's settings.
+
 The credential file must stay outside the repository. Delivery attempts are persisted before
 sending, retry transient failures with bounded backoff, and revoke devices after permanent
 provider errors such as an unregistered target.
