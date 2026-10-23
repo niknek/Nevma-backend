@@ -22,8 +22,13 @@ if (app.Environment.IsDevelopment())
 {
     app.Use(async (context, next) =>
     {
+        var developmentUser = context.Request.Headers["X-Nevma-User-Id"].ToString();
+        if (context.Request.Path.StartsWithSegments("/hubs/chat") &&
+            string.IsNullOrWhiteSpace(developmentUser))
+            developmentUser = context.Request.Query["userId"].ToString();
+
         if (context.User.Identity?.IsAuthenticated != true &&
-            Guid.TryParse(context.Request.Headers["X-Nevma-User-Id"], out var userId))
+            Guid.TryParse(developmentUser, out var userId))
         {
             var identity = new System.Security.Claims.ClaimsIdentity(
                 [new System.Security.Claims.Claim("sub", userId.ToString())],
