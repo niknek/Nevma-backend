@@ -213,6 +213,52 @@ public sealed class MessagingServiceTests
     }
 
     [Fact]
+    public async Task Loading_messages_marks_incoming_messages_as_delivered()
+    {
+        await using var context = CreateContext();
+        var conversationService = CreateConversationService(context);
+        var messageService = CreateMessageService(context);
+        var senderId = Guid.NewGuid();
+        var recipientId = Guid.NewGuid();
+        var conversation = await conversationService.CreateAsync(senderId, PersonalConversation(recipientId));
+        var sent = Assert.IsType<SendMessageResult.Sent>(await messageService.SendAsync(
+            conversation.Conversation!.Id,
+            senderId,
+            new SendMessageRequest("Hello")));
+
+        var page = await messageService.GetMessagesAsync(conversation.Conversation.Id, recipientId, null, 50);
+
+        var receipt = Assert.Single(page!.Receipts!, item => item.MessageId == sent.Message.Id);
+        Assert.NotNull(receipt.DeliveredAt);
+        Assert.Null(receipt.ReadAt);
+    }
+
+    [Fact]
+    public async Task Replying_marks_prior_incoming_messages_as_read()
+    {
+        await using var context = CreateContext();
+        var conversationService = CreateConversationService(context);
+        var messageService = CreateMessageService(context);
+        var senderId = Guid.NewGuid();
+        var recipientId = Guid.NewGuid();
+        var conversation = await conversationService.CreateAsync(senderId, PersonalConversation(recipientId));
+        var sent = Assert.IsType<SendMessageResult.Sent>(await messageService.SendAsync(
+            conversation.Conversation!.Id,
+            senderId,
+            new SendMessageRequest("Hello")));
+
+        await messageService.SendAsync(
+            conversation.Conversation.Id,
+            recipientId,
+            new SendMessageRequest("Reply"));
+
+        var receipt = await context.MessageReceipts.SingleAsync(item =>
+            item.MessageId == sent.Message.Id && item.UserId == recipientId);
+        Assert.NotNull(receipt.DeliveredAt);
+        Assert.NotNull(receipt.ReadAt);
+    }
+
+    [Fact]
     public async Task Non_sender_cannot_edit_a_message()
     {
         await using var context = CreateContext();

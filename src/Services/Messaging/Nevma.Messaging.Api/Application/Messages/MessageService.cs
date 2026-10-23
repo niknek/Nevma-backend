@@ -28,7 +28,9 @@ public sealed class MessageService(
             pageSize + 1,
             cancellationToken);
         var hasMore = messages.Count > pageSize;
-        var items = messages.Take(pageSize).Select(ToResponse).ToArray();
+        var visibleMessages = messages.Take(pageSize).ToArray();
+        await MarkReceiptsAsync(visibleMessages, userId, markRead: false, cancellationToken);
+        var items = visibleMessages.Select(ToResponse).ToArray();
         var receipts = await messageRepository.ListReceiptsAsync(items.Select(item => item.Id).ToArray(), cancellationToken);
         return new MessagePageResponse(
             items,
@@ -61,6 +63,11 @@ public sealed class MessageService(
         if (!await conversationRepository.IsParticipantAsync(conversationId, senderId, cancellationToken))
             return new SendMessageResult.NotFound();
 
+        // Sending a reply is an unambiguous signal that the sender has opened the
+        // conversation and read the messages that were already visible to them.
+        var priorMessages = await messageRepository.ListAsync(conversationId, null, 100, cancellationToken);
+        await MarkReceiptsAsync(priorMessages, senderId, markRead: true, cancellationToken);
+
         if (attachmentIds.Length > 0)
         {
             var participants = await conversationRepository.ListParticipantIdsAsync(conversationId, cancellationToken);
@@ -86,6 +93,34 @@ public sealed class MessageService(
         await messageRepository.AddAsync(message, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return new SendMessageResult.Sent(ToResponse(message));
+    }
+
+    private async Task MarkReceiptsAsync(
+        IReadOnlyCollection<Message> messages,
+        Guid actorId,
+        bool markRead,
+        CancellationToken cancellationToken)
+    {
+        var now = timeProvider.GetUtcNow();
+        var changed = false;
+        foreach (var message in messages.Where(item => item.SenderId != actorId))
+        {
+            var receipt = await messageRepository.GetReceiptAsync(message.Id, actorId, cancellationToken);
+            if (receipt is null)
+            {
+                receipt = MessageReceipt.Create(message.Id, actorId);
+                await messageRepository.AddReceiptAsync(receipt, cancellationToken);
+            }
+
+            if (markRead)
+                receipt.MarkRead(now);
+            else
+                receipt.MarkDelivered(now);
+            changed = true;
+        }
+
+        if (changed)
+            await unitOfWork.SaveChangesAsync(cancellationToken);
     }
 
     public async Task<MessageChangeResult> EditAsync(
