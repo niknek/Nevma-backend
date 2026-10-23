@@ -9,6 +9,7 @@ namespace Nevma.Messaging.Api.Realtime;
 [Authorize]
 public sealed class ChatHub(
     ConversationService conversationService,
+    IConversationRepository conversationRepository,
     IUserPresenceTracker presenceTracker) : Hub
 {
     public override async Task OnConnectedAsync()
@@ -47,8 +48,15 @@ public sealed class ChatHub(
         var userId = GetUserId();
         if (!await conversationService.CanAccessAsync(conversationId, userId, Context.ConnectionAborted))
             throw new HubException("Conversation is unavailable.");
-        await Clients.OthersInGroup(ConversationGroupName(conversationId))
-            .SendAsync("typing.changed", new { userId }, Context.ConnectionAborted);
+        var recipients = (await conversationRepository.ListParticipantIdsAsync(
+                conversationId,
+                Context.ConnectionAborted))
+            .Where(participantId => participantId != userId)
+            .Select(UserGroupName)
+            .ToArray();
+        if (recipients.Length > 0)
+            await Clients.Groups(recipients)
+                .SendAsync("typing.changed", new { userId, conversationId }, Context.ConnectionAborted);
     }
 
     public async Task Heartbeat()
