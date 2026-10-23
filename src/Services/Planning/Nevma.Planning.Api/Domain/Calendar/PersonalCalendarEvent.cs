@@ -14,6 +14,7 @@ public sealed class PersonalCalendarEvent
     public Guid[] AcceptedParticipantIds { get; private set; } = [];
     public Guid[] DeclinedParticipantIds { get; private set; } = [];
     public string[] DeclinedParticipantReasons { get; private set; } = [];
+    public Guid[] LiveLocationSharingUserIds { get; private set; } = [];
     public PersonalCalendarEventStatus Status { get; private set; } = PersonalCalendarEventStatus.Confirmed;
     public string? CancellationReason { get; private set; }
     public DateTimeOffset? ReminderDispatchedAt { get; private set; }
@@ -27,10 +28,22 @@ public sealed class PersonalCalendarEvent
         DateTimeOffset startsAt,
         DateTimeOffset endsAt,
         IReadOnlyCollection<Guid>? participantIds,
+        DateTimeOffset now) =>
+        Create(userId, title, purpose, location, startsAt, endsAt, participantIds, false, now);
+
+    public static PersonalCalendarEvent Create(
+        Guid userId,
+        string title,
+        string? purpose,
+        string? location,
+        DateTimeOffset startsAt,
+        DateTimeOffset endsAt,
+        IReadOnlyCollection<Guid>? participantIds,
+        bool organizerSharesLiveLocation,
         DateTimeOffset now)
     {
         var item = new PersonalCalendarEvent { Id = Guid.NewGuid(), UserId = userId };
-        item.Update(title, purpose, location, startsAt, endsAt, participantIds, now);
+        item.Update(title, purpose, location, startsAt, endsAt, participantIds, organizerSharesLiveLocation, now);
         return item;
     }
 
@@ -41,6 +54,7 @@ public sealed class PersonalCalendarEvent
         DateTimeOffset startsAt,
         DateTimeOffset endsAt,
         IReadOnlyCollection<Guid>? participantIds,
+        bool organizerSharesLiveLocation,
         DateTimeOffset now)
     {
         if (string.IsNullOrWhiteSpace(title) || title.Length > 200) throw new ArgumentException("A title is required.");
@@ -54,6 +68,12 @@ public sealed class PersonalCalendarEvent
             .ToArray();
         DeclinedParticipantIds = retainedDeclines.Select(item => item.Id).ToArray();
         DeclinedParticipantReasons = retainedDeclines.Select(item => item.Reason).ToArray();
+        LiveLocationSharingUserIds = LiveLocationSharingUserIds
+            .Where(id => id == UserId || ParticipantIds.Contains(id))
+            .Append(organizerSharesLiveLocation ? UserId : Guid.Empty)
+            .Where(id => id != Guid.Empty && (id != UserId || organizerSharesLiveLocation))
+            .Distinct()
+            .ToArray();
         RefreshStatus();
         UpdatedAt = now.ToUniversalTime();
     }
@@ -116,6 +136,16 @@ public sealed class PersonalCalendarEvent
         RefreshStatus();
         UpdatedAt = now.ToUniversalTime();
         return ParticipantResponseOutcome.Updated;
+    }
+
+    public bool SetLiveLocationSharing(Guid userId, bool enabled, DateTimeOffset now)
+    {
+        if (userId != UserId && !ParticipantIds.Contains(userId)) return false;
+        LiveLocationSharingUserIds = enabled
+            ? LiveLocationSharingUserIds.Append(userId).Distinct().ToArray()
+            : LiveLocationSharingUserIds.Where(id => id != userId).ToArray();
+        UpdatedAt = now.ToUniversalTime();
+        return true;
     }
 
     private void RefreshStatus()

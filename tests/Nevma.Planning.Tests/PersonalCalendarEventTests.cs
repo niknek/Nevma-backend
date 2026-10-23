@@ -92,4 +92,24 @@ public sealed class PersonalCalendarEventTests
 
         Assert.Equal(ManualCancellationOutcome.AppointmentStarted, appointment.Cancel("Too late", Now.AddMinutes(10)));
     }
+
+    [Fact]
+    public void Live_location_consent_is_independent_for_each_participant()
+    {
+        var organizer = Guid.NewGuid();
+        var participant = Guid.NewGuid();
+        var appointment = PersonalCalendarEvent.Create(
+            organizer, "Coffee", null, null, Now.AddHours(1), Now.AddHours(2),
+            [participant], true, Now);
+
+        Assert.Contains(organizer, appointment.LiveLocationSharingUserIds);
+        Assert.DoesNotContain(participant, appointment.LiveLocationSharingUserIds);
+
+        Assert.True(appointment.SetLiveLocationSharing(participant, true, Now.AddMinutes(1)));
+        Assert.Contains(participant, appointment.LiveLocationSharingUserIds);
+
+        Assert.True(appointment.SetLiveLocationSharing(organizer, false, Now.AddMinutes(2)));
+        Assert.DoesNotContain(organizer, appointment.LiveLocationSharingUserIds);
+        Assert.Contains(participant, appointment.LiveLocationSharingUserIds);
+    }
 }

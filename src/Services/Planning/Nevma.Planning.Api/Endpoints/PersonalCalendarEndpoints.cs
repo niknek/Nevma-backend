@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
+using System.Collections.Concurrent;
 using Nevma.Contracts.Integration;
 using Nevma.Contracts.Planning;
 using Nevma.Planning.Api.Application;
@@ -10,6 +11,8 @@ namespace Nevma.Planning.Api.Endpoints;
 
 public static class PersonalCalendarEndpoints
 {
+    private static readonly ConcurrentDictionary<(Guid EventId, Guid UserId), LiveLocationPointResponse> LiveLocations = new();
+
     public static IEndpointRouteBuilder MapPersonalCalendarEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var group = endpoints.MapGroup("/api/personal-calendar").WithTags("Personal calendar");
@@ -27,7 +30,7 @@ public static class PersonalCalendarEndpoints
             if (await HasActiveConflict(db, userId, request.StartsAt, request.EndsAt, null, ct))
                 return ConflictResult();
             var now = clock.GetUtcNow();
-            var item = PersonalCalendarEvent.Create(userId, request.Title, request.Purpose, request.Location, request.StartsAt, request.EndsAt, request.ParticipantIds, now);
+            var item = PersonalCalendarEvent.Create(userId, request.Title, request.Purpose, request.Location, request.StartsAt, request.EndsAt, request.ParticipantIds, request.OrganizerSharesLiveLocation, now);
             db.PersonalCalendarEvents.Add(item);
             foreach (var participantId in item.ParticipantIds)
                 AddInvitationEvent(outbox, item, participantId, MeetingInvitationStatus.Pending, now);
@@ -52,7 +55,7 @@ public static class PersonalCalendarEndpoints
                 return ConflictResult();
             var previousParticipants = item.ParticipantIds.ToHashSet();
             var now = currentTime;
-            item.Update(request.Title, request.Purpose, request.Location, request.StartsAt, request.EndsAt, request.ParticipantIds, now);
+            item.Update(request.Title, request.Purpose, request.Location, request.StartsAt, request.EndsAt, request.ParticipantIds, request.OrganizerSharesLiveLocation, now);
             foreach (var participantId in item.ParticipantIds.Where(idValue => !previousParticipants.Contains(idValue)))
                 AddInvitationEvent(outbox, item, participantId, MeetingInvitationStatus.Pending, now);
             await db.SaveChangesAsync(ct); return Results.Ok(item);
@@ -104,6 +107,47 @@ public static class PersonalCalendarEndpoints
                 item.Title, item.StartsAt, item.CancellationReason!, now));
             await db.SaveChangesAsync(ct);
             return Results.Ok(item);
+        });
+        group.MapPost("/{id:guid}/live-location/consent", async (Guid id, LiveLocationConsentRequest request, HttpContext context, PlanningDbContext db, TimeProvider clock, CancellationToken ct) =>
+        {
+            if (!TryUser(context, out var userId)) return Results.Unauthorized();
+            var item = await db.PersonalCalendarEvents.SingleOrDefaultAsync(x => x.Id == id, ct);
+            if (item is null) return Results.NotFound();
+            var now = clock.GetUtcNow();
+            if (item.EndsAt <= now || item.Status is PersonalCalendarEventStatus.Cancelled or PersonalCalendarEventStatus.Declined)
+                return Results.Conflict(new { message = "Live location is unavailable for this appointment." });
+            if (!item.SetLiveLocationSharing(userId, request.Enabled, now)) return Results.Forbid();
+            if (!request.Enabled) LiveLocations.TryRemove((id, userId), out _);
+            await db.SaveChangesAsync(ct);
+            return Results.Ok(item);
+        });
+        group.MapPut("/{id:guid}/live-location", async (Guid id, LiveLocationUpdateRequest request, HttpContext context, PlanningDbContext db, TimeProvider clock, CancellationToken ct) =>
+        {
+            if (!TryUser(context, out var userId)) return Results.Unauthorized();
+            var item = await db.PersonalCalendarEvents.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, ct);
+            if (item is null) return Results.NotFound();
+            var now = clock.GetUtcNow();
+            if (now < item.StartsAt.AddHours(-1) || now >= item.EndsAt || !item.LiveLocationSharingUserIds.Contains(userId))
+                return Results.Conflict(new { message = "Live location is not active." });
+            if (request.Latitude is < -90 or > 90 || request.Longitude is < -180 or > 180 || request.Accuracy < 0)
+                return Results.ValidationProblem(new Dictionary<string, string[]> { ["location"] = ["Location coordinates are invalid."] });
+            var point = new LiveLocationPointResponse(userId, request.Latitude, request.Longitude, request.Accuracy, now);
+            LiveLocations[(id, userId)] = point;
+            return Results.Ok(point);
+        });
+        group.MapGet("/{id:guid}/live-locations", async (Guid id, HttpContext context, PlanningDbContext db, TimeProvider clock, CancellationToken ct) =>
+        {
+            if (!TryUser(context, out var userId)) return Results.Unauthorized();
+            var item = await db.PersonalCalendarEvents.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, ct);
+            if (item is null) return Results.NotFound();
+            if (userId != item.UserId && !item.ParticipantIds.Contains(userId)) return Results.Forbid();
+            var now = clock.GetUtcNow();
+            if (now < item.StartsAt.AddHours(-1) || now >= item.EndsAt) return Results.Ok(Array.Empty<LiveLocationPointResponse>());
+            var points = item.LiveLocationSharingUserIds
+                .Select(idValue => LiveLocations.TryGetValue((id, idValue), out var point) ? point : null)
+                .Where(point => point is not null && now - point.UpdatedAt <= TimeSpan.FromMinutes(1))
+                .ToArray();
+            return Results.Ok(points);
         });
         return endpoints;
     }
@@ -162,7 +206,11 @@ public sealed record PersonalEventRequest(
     string? Location,
     DateTimeOffset StartsAt,
     DateTimeOffset EndsAt,
-    IReadOnlyCollection<Guid>? ParticipantIds = null);
+    IReadOnlyCollection<Guid>? ParticipantIds = null,
+    bool OrganizerSharesLiveLocation = false);
 
 public sealed record CancelPersonalEventRequest(string Reason);
 public sealed record DeclinePersonalEventRequest(string? Reason);
+public sealed record LiveLocationConsentRequest(bool Enabled);
+public sealed record LiveLocationUpdateRequest(double Latitude, double Longitude, double Accuracy);
+public sealed record LiveLocationPointResponse(Guid UserId, double Latitude, double Longitude, double Accuracy, DateTimeOffset UpdatedAt);
