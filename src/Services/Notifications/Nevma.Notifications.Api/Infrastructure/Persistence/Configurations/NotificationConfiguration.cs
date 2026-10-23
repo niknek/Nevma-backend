@@ -17,6 +17,7 @@ public sealed class NotificationConfiguration : IEntityTypeConfiguration<Notific
         builder.Property(notification => notification.Body).HasMaxLength(4_000).IsRequired();
         builder.Property(notification => notification.CreatedAt).IsRequired();
         builder.Property(notification => notification.ReadAt);
+        builder.Property(notification => notification.ResourceId);
         builder.Property<uint>("xmin").IsRowVersion();
         builder.HasIndex(notification => new
         {

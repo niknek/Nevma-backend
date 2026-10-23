@@ -8,7 +8,8 @@ public sealed class Notification
         string type,
         string title,
         string body,
-        DateTimeOffset createdAt)
+        DateTimeOffset createdAt,
+        Guid? resourceId)
     {
         Id = id;
         UserId = userId;
@@ -16,6 +17,7 @@ public sealed class Notification
         Title = title;
         Body = body;
         CreatedAt = createdAt;
+        ResourceId = resourceId;
     }
 
     public Guid Id { get; }
@@ -25,14 +27,16 @@ public sealed class Notification
     public string Body { get; }
     public DateTimeOffset CreatedAt { get; }
     public DateTimeOffset? ReadAt { get; private set; }
+    public Guid? ResourceId { get; }
 
     public static Notification Create(
         Guid userId,
         string type,
         string title,
         string body,
-        DateTimeOffset createdAt) =>
-        new(Guid.NewGuid(), userId, type, title.Trim(), body.Trim(), createdAt);
+        DateTimeOffset createdAt,
+        Guid? resourceId = null) =>
+        new(Guid.NewGuid(), userId, type, title.Trim(), body.Trim(), createdAt, resourceId);
 
     public bool MarkRead(DateTimeOffset readAt)
     {

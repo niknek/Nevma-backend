@@ -19,7 +19,8 @@ public sealed record NotificationResponse(
     string Title,
     string Body,
     DateTimeOffset CreatedAt,
-    DateTimeOffset? ReadAt);
+    DateTimeOffset? ReadAt,
+    Guid? ResourceId = null);
 
 public sealed record NotificationPreferenceResponse(
     bool PushEnabled,

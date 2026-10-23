@@ -63,7 +63,8 @@ public sealed class NotificationService(
             notification.Title,
             notification.Body,
             notification.CreatedAt,
-            notification.ReadAt);
+            notification.ReadAt,
+            notification.ResourceId);
 }
 
 public abstract record MarkNotificationReadResult

@@ -40,7 +40,8 @@ public sealed class PlanningEventHandler(
                 "meeting-invitation.changed",
                 title,
                 body,
-                now);
+                now,
+                integrationEvent.CalendarEventId);
             await notificationRepository.AddAsync(notification, cancellationToken);
             created.Add(notification);
             var devices = await pushDeviceRepository.ListActiveAsync(userId, cancellationToken);
@@ -127,7 +128,8 @@ public sealed class PlanningEventHandler(
                 "calendar.reminder",
                 "Appointment coming up",
                 $"{integrationEvent.Title} starts soon.",
-                now);
+                now,
+                integrationEvent.CalendarEventId);
             await notificationRepository.AddAsync(notification, cancellationToken);
             created.Add(notification);
             var devices = await pushDeviceRepository.ListActiveAsync(userId, cancellationToken);
@@ -161,7 +163,8 @@ public sealed class PlanningEventHandler(
                 "calendar.cancelled",
                 "Appointment cancelled",
                 $"{integrationEvent.Title} was cancelled. Reason: {integrationEvent.Reason}",
-                now);
+                now,
+                integrationEvent.CalendarEventId);
             await notificationRepository.AddAsync(notification, cancellationToken);
             created.Add(notification);
             var devices = await pushDeviceRepository.ListActiveAsync(userId, cancellationToken);
@@ -189,7 +192,8 @@ public sealed class PlanningEventHandler(
                     notification.Title,
                     notification.Body,
                     notification.CreatedAt,
-                    notification.ReadAt),
+                    notification.ReadAt,
+                    notification.ResourceId),
                 cancellationToken);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)

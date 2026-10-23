@@ -79,7 +79,8 @@ public sealed class PushDeliveryDispatcher(
                         new Dictionary<string, string>
                         {
                             ["notificationId"] = workItem.Notification.Id.ToString("N"),
-                            ["type"] = workItem.Notification.Type
+                            ["type"] = workItem.Notification.Type,
+                            ["resourceId"] = workItem.Notification.ResourceId?.ToString("N") ?? string.Empty
                         },
                         cancellationToken);
                     ApplyResult(workItem, result, now);
