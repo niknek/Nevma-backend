@@ -77,6 +77,45 @@ public sealed class AddressBookTests
     }
 
     [Fact]
+    public async Task Contact_links_by_profile_phone_even_when_email_and_country_prefix_differ()
+    {
+        await using var context = CreateContext();
+        var ownerId = Guid.NewGuid();
+        var accountId = Guid.NewGuid();
+        var profile = Nevma.Identity.Api.Domain.Users.User.Create(accountId, "Konstantina", null, DateTimeOffset.UtcNow);
+        profile.UpdateProfile("Konstantina", null, null, "different@example.test", "+30 691 234 5678", false, false, "Available", "Contacts");
+        context.Profiles.Add(profile);
+        await context.SaveChangesAsync();
+        var service = CreateService(context);
+
+        var result = Assert.IsType<AddressBookSaveResult.Saved>(await service.CreateAsync(
+            ownerId,
+            new SaveAddressBookContactRequest("Konstantina", "6912345678", "old@example.test", null, null, null)));
+
+        Assert.Equal(accountId, result.Contact.LinkedUserId);
+    }
+
+    [Fact]
+    public async Task Listing_rechecks_old_unlinked_contacts_after_the_user_adds_their_phone()
+    {
+        await using var context = CreateContext();
+        var ownerId = Guid.NewGuid();
+        var accountId = Guid.NewGuid();
+        var service = CreateService(context);
+        var created = Assert.IsType<AddressBookSaveResult.Saved>(await service.CreateAsync(
+            ownerId, new SaveAddressBookContactRequest("Konstantina", "6912345678", null, null, null, null)));
+        Assert.Null(created.Contact.LinkedUserId);
+
+        var profile = Nevma.Identity.Api.Domain.Users.User.Create(accountId, "Konstantina", null, DateTimeOffset.UtcNow);
+        profile.UpdateProfile("Konstantina", null, null, null, "0030 691 234 5678", false, false, "Available", "Contacts");
+        context.Profiles.Add(profile);
+        await context.SaveChangesAsync();
+
+        var contact = Assert.Single(await service.ListAsync(ownerId));
+        Assert.Equal(accountId, contact.LinkedUserId);
+    }
+
+    [Fact]
     public async Task Phone_must_be_unique_per_owner()
     {
         await using var context = CreateContext();

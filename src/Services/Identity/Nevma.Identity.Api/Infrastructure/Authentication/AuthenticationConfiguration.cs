@@ -23,8 +23,9 @@ public static class AuthenticationConfiguration
         IWebHostEnvironment environment)
     {
         var localDevelopment = environment.IsDevelopment();
+        var requireConfirmedEmail = configuration.GetValue<bool>("EmailDelivery:Enabled");
         services
-            .AddIdentityCore<IdentityAccount>(ConfigureIdentity)
+            .AddIdentityCore<IdentityAccount>(options => ConfigureIdentity(options, requireConfirmedEmail))
             .AddRoles<IdentityRole<Guid>>()
             .AddSignInManager()
             .AddEntityFrameworkStores<IdentityDbContext>()
@@ -183,10 +184,10 @@ public static class AuthenticationConfiguration
                 AutoReplenishment = true
             });
 
-    private static void ConfigureIdentity(IdentityOptions options)
+    private static void ConfigureIdentity(IdentityOptions options, bool requireConfirmedEmail)
     {
         options.User.RequireUniqueEmail = true;
-        options.SignIn.RequireConfirmedEmail = true;
+        options.SignIn.RequireConfirmedEmail = requireConfirmedEmail;
         options.Password.RequiredLength = 12;
         options.Password.RequiredUniqueChars = 4;
         options.Password.RequireDigit = true;

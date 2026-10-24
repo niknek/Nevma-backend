@@ -13,6 +13,17 @@ public sealed class AddressBookService(
         CancellationToken cancellationToken = default)
     {
         var contacts = await repository.ListAsync(ownerId, cancellationToken);
+        var changed = false;
+        foreach (var contact in contacts.Where(contact => contact.LinkedUserId is null))
+        {
+            var linkedUserId = await repository.ResolveLinkedUserIdAsync(
+                ownerId, contact.Phone, contact.Email, cancellationToken);
+            if (linkedUserId is null) continue;
+            contact.Update(contact.Name, contact.Phone, contact.Email, contact.Social, contact.Address,
+                contact.Notes, linkedUserId, clock.GetUtcNow());
+            changed = true;
+        }
+        if (changed) await unitOfWork.SaveChangesAsync(cancellationToken);
         return contacts.Select(ToResponse).ToArray();
     }
 
