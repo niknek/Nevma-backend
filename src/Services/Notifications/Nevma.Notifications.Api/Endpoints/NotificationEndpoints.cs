@@ -9,6 +9,17 @@ public static class NotificationEndpoints
     {
         var notifications = endpoints.MapGroup("/api/notifications").WithTags("Notifications");
 
+        notifications.MapPost("/internal/chat", async (ChatPushRequest request, HttpContext context,
+            IConfiguration configuration, NotificationService service, CancellationToken cancellationToken) =>
+        {
+            var expected = configuration["InternalServices:Key"];
+            if (string.IsNullOrWhiteSpace(expected) || context.Request.Headers["X-Nevma-Internal-Key"] != expected)
+                return Results.Unauthorized();
+            await service.CreatePushAsync(request.UserId, "chat.message", "Nevma · νέο μήνυμα",
+                $"{request.SenderName} σου έστειλε μήνυμα.", request.ConversationId, cancellationToken);
+            return Results.Accepted();
+        }).AllowAnonymous();
+
         notifications.MapGet("/", async (
             int? take,
             HttpContext context,
@@ -70,3 +81,5 @@ public static class NotificationEndpoints
         (context.RequestServices.GetRequiredService<IHostEnvironment>().IsDevelopment() &&
          Guid.TryParse(context.Request.Headers["X-Nevma-User-Id"], out userId));
 }
+
+public sealed record ChatPushRequest(Guid UserId, Guid ConversationId, string SenderName);

@@ -1,12 +1,17 @@
 using Nevma.Contracts.Notifications;
 using Nevma.Notifications.Api.Domain.Notifications;
+using Nevma.Notifications.Api.Application.Delivery;
+using Nevma.Notifications.Api.Application.PushDevices;
+using Nevma.Notifications.Api.Domain.Delivery;
 
 namespace Nevma.Notifications.Api.Application.Notifications;
 
 public sealed class NotificationService(
     INotificationRepository repository,
     INotificationsUnitOfWork unitOfWork,
-    TimeProvider timeProvider)
+    TimeProvider timeProvider,
+    IPushDeviceRepository? pushDevices = null,
+    IDeliveryAttemptRepository? deliveryAttempts = null)
 {
     public async Task<IReadOnlyList<NotificationResponse>> ListAsync(
         Guid userId,
@@ -52,6 +57,20 @@ public sealed class NotificationService(
             body,
             timeProvider.GetUtcNow());
         await repository.AddAsync(notification, cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return ToResponse(notification);
+    }
+
+    public async Task<NotificationResponse> CreatePushAsync(Guid userId, string type, string title,
+        string body, Guid resourceId, CancellationToken cancellationToken = default)
+    {
+        if (pushDevices is null || deliveryAttempts is null)
+            throw new InvalidOperationException("Push delivery services are not configured.");
+        var now = timeProvider.GetUtcNow();
+        var notification = Notification.Create(userId, type, title, body, now, resourceId);
+        await repository.AddAsync(notification, cancellationToken);
+        foreach (var device in await pushDevices.ListActiveAsync(userId, cancellationToken))
+            await deliveryAttempts.AddAsync(DeliveryAttempt.Create(notification.Id, device.Id, now), cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return ToResponse(notification);
     }

@@ -124,6 +124,8 @@ public static class ConversationEndpoints
             int? take,
             ClaimsPrincipal principal,
             MessageService service,
+            IConversationRepository conversationRepository,
+            IHttpClientFactory httpClientFactory,
             CancellationToken cancellationToken) =>
         {
             if (!TryGetUserId(principal, out var userId))
@@ -144,6 +146,8 @@ public static class ConversationEndpoints
             HttpRequest httpRequest,
             ClaimsPrincipal principal,
             MessageService service,
+            IConversationRepository conversationRepository,
+            IHttpClientFactory httpClientFactory,
             IHubContext<ChatHub> hub,
             CancellationToken cancellationToken) =>
         {
@@ -165,6 +169,20 @@ public static class ConversationEndpoints
             var message = ((SendMessageResult.Sent)result).Message;
             await hub.Clients.Group(ChatHub.ConversationGroupName(conversationId))
                 .SendAsync("message.received", message, cancellationToken);
+            var recipients = await conversationRepository.ListParticipantIdsAsync(conversationId, cancellationToken);
+            var notifications = httpClientFactory.CreateClient("Notifications");
+            foreach (var recipientId in recipients.Where(id => id != senderId))
+            {
+                try
+                {
+                    await notifications.PostAsJsonAsync("/api/notifications/internal/chat",
+                        new { userId = recipientId, conversationId, senderName = "Μια επαφή" }, cancellationToken);
+                }
+                catch (Exception exception) when (exception is not OperationCanceledException)
+                {
+                    // The durable chat message must succeed even if push delivery is temporarily unavailable.
+                }
+            }
             return Results.Created(
                 $"/api/conversations/{conversationId}/messages/{message.Id}",
                 message);

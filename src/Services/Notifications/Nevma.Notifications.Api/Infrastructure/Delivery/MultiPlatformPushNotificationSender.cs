@@ -89,9 +89,12 @@ public sealed class MultiPlatformPushNotificationSender : IPushNotificationSende
         catch (JsonException) { return new PushSendResult.PermanentFailure("InvalidWebSubscription"); }
         if (subscription?.Endpoint is null || subscription.Keys?.P256dh is null || subscription.Keys.Auth is null)
             return new PushSendResult.PermanentFailure("InvalidWebSubscription");
-        var url = data.TryGetValue("resourceId", out var resourceId) && !string.IsNullOrWhiteSpace(resourceId)
-            ? $"/?eventId={Uri.EscapeDataString(resourceId)}#schedule"
-            : "/";
+        var isChat = data.TryGetValue("type", out var type) && type == "chat.message";
+        var url = isChat
+            ? "/#conversations"
+            : data.TryGetValue("resourceId", out var resourceId) && !string.IsNullOrWhiteSpace(resourceId)
+                ? $"/?eventId={Uri.EscapeDataString(resourceId)}#schedule"
+                : "/";
         var payload = JsonSerializer.Serialize(new { title, body, data, url }, JsonOptions);
         try
         {

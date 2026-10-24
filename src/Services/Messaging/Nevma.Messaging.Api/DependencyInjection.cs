@@ -77,6 +77,11 @@ public static class DependencyInjection
             .AddHttpClient("Files", client =>
                 client.BaseAddress = new Uri(configuration["Services:Files"] ?? "http://localhost:5106"))
             .AddNevmaResilience();
+        services.AddHttpClient("Notifications", client =>
+        {
+            client.BaseAddress = new Uri(configuration["Services:Notifications"] ?? "http://localhost:5104");
+            client.DefaultRequestHeaders.Add("X-Nevma-Internal-Key", configuration["InternalServices:Key"] ?? "nevma-local-internal");
+        }).AddNevmaResilience();
 
         var brokerOptions = configuration
             .GetSection(MessageBrokerOptions.SectionName)

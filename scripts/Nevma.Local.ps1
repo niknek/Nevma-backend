@@ -109,6 +109,11 @@ function Set-NevmaProcessEnvironment {
         'SpeechToText__Enabled'
         'SpeechToText__Provider'
         'SpeechToText__Endpoint'
+        'PushDelivery__Enabled'
+        'PushDelivery__WebPush__Enabled'
+        'PushDelivery__WebPush__PublicKey'
+        'PushDelivery__WebPush__PrivateKey'
+        'PushDelivery__WebPush__Subject'
     )) {
         if ($Values.ContainsKey($name) -and -not [string]::IsNullOrWhiteSpace($Values[$name])) {
             [System.Environment]::SetEnvironmentVariable($name, $Values[$name], 'Process')
