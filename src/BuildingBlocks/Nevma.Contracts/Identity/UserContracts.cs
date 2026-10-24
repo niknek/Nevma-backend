@@ -4,7 +4,8 @@ public sealed record RegisterUserRequest(
     string Email,
     string Password,
     string DisplayName,
-    string? AvatarUrl);
+    string? AvatarUrl,
+    string? Phone = null);
 
 public sealed record UserSummary(
     Guid Id,
