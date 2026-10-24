@@ -59,6 +59,18 @@ public sealed class AccountRecoveryService(
             cancellationToken);
     }
 
+    public async Task RequestEmailConfirmationAsync(
+        string email,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+            return;
+        var account = await userManager.FindByEmailAsync(email.Trim());
+        if (account is null)
+            return;
+        await RequestEmailConfirmationAsync(account.Id, cancellationToken);
+    }
+
     public async Task<AccountRecoveryResult> ConfirmEmailAsync(
         string email,
         string encodedToken)

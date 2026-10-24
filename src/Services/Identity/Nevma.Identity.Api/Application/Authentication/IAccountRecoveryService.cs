@@ -5,6 +5,7 @@ public interface IAccountRecoveryService
     Task RequestPasswordResetAsync(string email, CancellationToken cancellationToken = default);
     Task<AccountRecoveryResult> ResetPasswordAsync(string email, string encodedToken, string newPassword);
     Task RequestEmailConfirmationAsync(Guid userId, CancellationToken cancellationToken = default);
+    Task RequestEmailConfirmationAsync(string email, CancellationToken cancellationToken = default);
     Task<AccountRecoveryResult> ConfirmEmailAsync(string email, string encodedToken);
 }
 

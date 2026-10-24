@@ -10,3 +10,5 @@ public sealed record ResetPasswordRequest(
 public sealed record ConfirmEmailRequest(
     string Email,
     string Token);
+
+public sealed record RequestEmailConfirmationRequest(string Email);

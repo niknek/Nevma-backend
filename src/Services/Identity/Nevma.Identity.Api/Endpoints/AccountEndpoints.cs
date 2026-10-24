@@ -28,7 +28,11 @@ public static class AccountEndpoints
                 await securityEvents.RecordFromRequestAsync(account.Id, "login.password", result.Succeeded, context);
 
             if (!result.Succeeded || account is null)
+            {
+                if (result.IsNotAllowed && account is not null && !account.EmailConfirmed)
+                    return Results.Problem(statusCode: StatusCodes.Status403Forbidden, title: "Email confirmation required.");
                 return Results.Problem(statusCode: StatusCodes.Status401Unauthorized, title: "Sign-in failed.");
+            }
 
             var profile = await userService.GetByIdAsync(account.Id, context.RequestAborted);
             return Results.Ok(new
@@ -109,6 +113,14 @@ public static class AccountEndpoints
                 if (environment.IsDevelopment() && Uri.TryCreate(redirectUrl, UriKind.Absolute, out _))
                     redirectUrl += redirectUrl.Contains('?') ? "&signedIn=1" : "?signedIn=1";
                 return Results.Redirect(redirectUrl);
+            }
+
+            if (result.IsNotAllowed && account is not null && !account.EmailConfirmed)
+            {
+                return Results.Problem(
+                    statusCode: StatusCodes.Status403Forbidden,
+                    title: "Email confirmation required.",
+                    detail: "Confirm the email address before signing in.");
             }
 
             return Results.Problem(

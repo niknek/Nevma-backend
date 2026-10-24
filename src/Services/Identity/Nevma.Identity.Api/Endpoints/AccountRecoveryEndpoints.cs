@@ -35,16 +35,15 @@ public static class AccountRecoveryEndpoints
         .RequireRateLimiting(AuthenticationConfiguration.AuthenticationRateLimitPolicy);
 
         recovery.MapPost("/email-confirmation/request", async (
-            ClaimsPrincipal principal,
+            RequestEmailConfirmationRequest request,
             IAccountRecoveryService service,
             CancellationToken cancellationToken) =>
         {
-            if (!Guid.TryParse(principal.FindFirstValue("sub"), out var userId))
-                return Results.Unauthorized();
-            await service.RequestEmailConfirmationAsync(userId, cancellationToken);
+            await service.RequestEmailConfirmationAsync(request.Email, cancellationToken);
             return Results.Accepted();
         })
-        .RequireAuthorization();
+        .AllowAnonymous()
+        .RequireRateLimiting(AuthenticationConfiguration.AuthenticationRateLimitPolicy);
 
         recovery.MapPost("/email-confirmation/confirm", async (
             ConfirmEmailRequest request,

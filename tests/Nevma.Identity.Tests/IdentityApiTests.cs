@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -9,6 +10,7 @@ using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 using Nevma.Contracts.Identity;
 using Nevma.Identity.Api.Infrastructure.Authentication;
+using Nevma.Identity.Api.Infrastructure.Persistence;
 
 namespace Nevma.Identity.Tests;
 
@@ -43,6 +45,14 @@ public sealed class IdentityApiTests
             "Strong!Password123",
             "Nektarios",
             null));
+        using (var scope = factory.Services.CreateScope())
+        {
+            var users = scope.ServiceProvider.GetRequiredService<UserManager<IdentityAccount>>();
+            var account = await users.FindByEmailAsync("profile-menu@example.com");
+            Assert.NotNull(account);
+            account.EmailConfirmed = true;
+            Assert.True((await users.UpdateAsync(account)).Succeeded);
+        }
 
         var response = await client.PostAsJsonAsync("/api/auth/login", new
         {
