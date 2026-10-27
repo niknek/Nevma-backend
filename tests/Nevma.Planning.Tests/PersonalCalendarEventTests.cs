@@ -84,15 +84,13 @@ public sealed class PersonalCalendarEventTests
     }
 
     [Fact]
-    public void A_started_appointment_can_be_cancelled_manually()
+    public void A_started_appointment_cannot_be_cancelled_manually()
     {
         var appointment = PersonalCalendarEvent.Create(
             Guid.NewGuid(), "Coffee", null, null, Now.AddMinutes(10), Now.AddHours(1),
             null, Now);
 
-        Assert.Equal(ManualCancellationOutcome.Updated, appointment.Cancel("Cancelled after start", Now.AddMinutes(10)));
-        Assert.Equal(PersonalCalendarEventStatus.Cancelled, appointment.Status);
-        Assert.Equal("Cancelled after start", appointment.CancellationReason);
+        Assert.Equal(ManualCancellationOutcome.AppointmentStarted, appointment.Cancel("Too late", Now.AddMinutes(10)));
     }
 
     [Fact]

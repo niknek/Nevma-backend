@@ -103,6 +103,8 @@ public sealed class PersonalCalendarEvent
             return ManualCancellationOutcome.InvalidReason;
         if (Status is PersonalCalendarEventStatus.Cancelled or PersonalCalendarEventStatus.Declined)
             return ManualCancellationOutcome.AlreadyHandled;
+        if (StartsAt <= now)
+            return ManualCancellationOutcome.AppointmentStarted;
         Status = PersonalCalendarEventStatus.Cancelled;
         CancellationReason = reason.Trim();
         UpdatedAt = now.ToUniversalTime();
