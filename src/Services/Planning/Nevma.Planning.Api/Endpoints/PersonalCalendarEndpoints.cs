@@ -97,8 +97,6 @@ public static class PersonalCalendarEndpoints
             var outcome = item.Cancel(request.Reason, now);
             if (outcome == ManualCancellationOutcome.InvalidReason)
                 return Results.ValidationProblem(new Dictionary<string, string[]> { ["reason"] = ["A cancellation reason of up to 500 characters is required."] });
-            if (outcome == ManualCancellationOutcome.AppointmentStarted)
-                return Results.Conflict(new { message = "An appointment that has already started cannot be cancelled." });
             if (outcome == ManualCancellationOutcome.AlreadyHandled)
                 return Results.Conflict(new { message = "Appointment has already been handled." });
             outbox.Add(new CalendarEventExpiredIntegrationEvent(
