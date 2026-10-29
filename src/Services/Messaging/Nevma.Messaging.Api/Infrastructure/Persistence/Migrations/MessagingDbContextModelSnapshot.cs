@@ -214,6 +214,10 @@ namespace Nevma.Messaging.Api.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsRestrictedAudience")
                         .HasColumnType("boolean");
 
+                    b.PrimitiveCollection<Guid[]>("LikedByIds")
+                        .IsRequired()
+                        .HasColumnType("uuid[]");
+
                     b.Property<string>("MediaType")
                         .IsRequired()
                         .HasMaxLength(100)

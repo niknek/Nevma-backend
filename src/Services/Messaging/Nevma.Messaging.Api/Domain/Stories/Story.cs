@@ -24,6 +24,12 @@ public sealed class Story
     public string? Caption { get; private set; }
     public Guid[] AudienceIds { get; private set; } = [];
     public Guid[] SeenByIds { get; private set; } = [];
+    public Guid[] LikedByIds { get; private set; } = [];
+    public void SetLike(Guid userId, bool liked)
+    {
+        if (userId == OwnerId || !AudienceIds.Contains(userId)) return;
+        LikedByIds = liked ? LikedByIds.Append(userId).Distinct().ToArray() : LikedByIds.Where(id => id != userId).ToArray();
+    }
     public bool IsRestrictedAudience { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
     public DateTimeOffset ExpiresAt { get; private set; }
