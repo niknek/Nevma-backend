@@ -24,13 +24,14 @@ public sealed class Story
     public string? Caption { get; private set; }
     public Guid[] AudienceIds { get; private set; } = [];
     public Guid[] SeenByIds { get; private set; } = [];
+    public bool IsRestrictedAudience { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
     public DateTimeOffset ExpiresAt { get; private set; }
 
     public static Story Create(Guid ownerId, Guid fileAssetId, string mediaType, string? caption,
-        IReadOnlyCollection<Guid> audienceIds, DateTimeOffset now) =>
+        IReadOnlyCollection<Guid> audienceIds, DateTimeOffset now, bool isRestrictedAudience = false) =>
         new(Guid.NewGuid(), ownerId, fileAssetId, mediaType, string.IsNullOrWhiteSpace(caption) ? null : caption.Trim(),
-            audienceIds.Where(id => id != Guid.Empty && id != ownerId).Distinct().ToArray(), now, now.AddHours(24));
+            audienceIds.Where(id => id != Guid.Empty && id != ownerId).Distinct().ToArray(), now, now.AddHours(24)) { IsRestrictedAudience = isRestrictedAudience };
 
     public void MarkSeen(Guid userId)
     {

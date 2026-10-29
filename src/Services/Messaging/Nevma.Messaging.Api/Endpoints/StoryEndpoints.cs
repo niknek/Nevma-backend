@@ -26,7 +26,7 @@ public static class StoryEndpoints
             if (!TryUser(principal, out var userId)) return Results.Unauthorized();
             if (request.FileAssetId == Guid.Empty || string.IsNullOrWhiteSpace(request.MediaType) || request.Caption?.Length > 500)
                 return Results.ValidationProblem(new Dictionary<string, string[]> { ["story"] = ["Valid media and a caption up to 500 characters are required."] });
-            var item = Story.Create(userId, request.FileAssetId, request.MediaType, request.Caption, request.AudienceIds ?? [], clock.GetUtcNow());
+            var item = Story.Create(userId, request.FileAssetId, request.MediaType, request.Caption, request.AudienceIds ?? [], clock.GetUtcNow(), request.IsRestrictedAudience);
             db.Stories.Add(item);
             await db.SaveChangesAsync(ct);
             return Results.Created($"/api/stories/{item.Id}", ToResponse(item));
@@ -54,8 +54,8 @@ public static class StoryEndpoints
         return endpoints;
     }
 
-    private static object ToResponse(Story x) => new { x.Id, x.OwnerId, x.FileAssetId, x.MediaType, x.Caption, x.SeenByIds, x.CreatedAt, x.ExpiresAt };
+    private static object ToResponse(Story x) => new { x.Id, x.OwnerId, x.FileAssetId, x.MediaType, x.Caption, x.SeenByIds, x.IsRestrictedAudience, x.CreatedAt, x.ExpiresAt };
     private static bool TryUser(ClaimsPrincipal principal, out Guid userId) => Guid.TryParse(principal.FindFirstValue("sub"), out userId);
 }
 
-public sealed record CreateStoryRequest(Guid FileAssetId, string MediaType, string? Caption, IReadOnlyCollection<Guid>? AudienceIds);
+public sealed record CreateStoryRequest(Guid FileAssetId, string MediaType, string? Caption, IReadOnlyCollection<Guid>? AudienceIds, bool IsRestrictedAudience = false);

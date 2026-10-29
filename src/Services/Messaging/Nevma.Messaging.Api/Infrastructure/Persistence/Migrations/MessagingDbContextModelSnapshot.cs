@@ -211,6 +211,9 @@ namespace Nevma.Messaging.Api.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("FileAssetId")
                         .HasColumnType("uuid");
 
+                    b.Property<bool>("IsRestrictedAudience")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("MediaType")
                         .IsRequired()
                         .HasMaxLength(100)
