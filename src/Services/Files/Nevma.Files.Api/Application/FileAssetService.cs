@@ -32,9 +32,19 @@ public sealed class FileAssetService(
         await upload.Content.CopyToAsync(buffer, cancellationToken);
         if (buffer.Length != upload.Length)
             return new FileUploadResult.Invalid("file", "File length changed during upload.");
+        var imageType = DetectImageType(buffer.GetBuffer().AsSpan(0, (int)buffer.Length));
+        if (imageType is not null)
+        {
+            var (mime, extension) = imageType.Value;
+            fileName = $"{Path.GetFileNameWithoutExtension(fileName)}{extension}";
+            upload = upload with { ContentType = mime };
+        }
         var validation = FileSignatureValidator.Validate(fileName, upload.ContentType, buffer.GetBuffer().AsSpan(0, (int)buffer.Length));
         if (validation is not null)
+        {
+            logger.LogWarning("File upload validation failed: extension {Extension}, content type {ContentType}, reason {Reason}", Path.GetExtension(fileName), upload.ContentType, validation);
             return new FileUploadResult.Invalid("file", validation);
+        }
 
         buffer.Position = 0;
         var scan = await scanner.ScanAsync(buffer, cancellationToken);
@@ -85,6 +95,15 @@ public sealed class FileAssetService(
             asset.ContentType,
             asset.Size);
         return new FileUploadResult.Uploaded(ToResponse(asset));
+    }
+
+    private static (string Mime, string Extension)? DetectImageType(ReadOnlySpan<byte> bytes)
+    {
+        if (bytes.Length < 12) return null;
+        if (bytes[0] == 0xff && bytes[1] == 0xd8 && bytes[2] == 0xff) return ("image/jpeg", ".jpg");
+        if (bytes[..8].SequenceEqual(new byte[] { 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a })) return ("image/png", ".png");
+        if (bytes[..4].SequenceEqual("RIFF"u8) && bytes.Slice(8, 4).SequenceEqual("WEBP"u8)) return ("image/webp", ".webp");
+        return null;
     }
 
     public async Task<IReadOnlyList<FileAssetResponse>> ListAsync(Guid userId, CancellationToken cancellationToken = default) =>
