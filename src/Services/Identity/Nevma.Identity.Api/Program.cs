@@ -44,6 +44,7 @@ app.MapMultiFactorAuthenticationEndpoints();
 app.MapSecurityEventEndpoints();
 app.MapContactConnectionEndpoints();
 app.MapAddressBookEndpoints();
+app.MapStoryAudienceGroupEndpoints();
 app.MapDeviceSessionEndpoints();
 app.MapOpenIddictEndpoints();
 app.MapUserEndpoints();

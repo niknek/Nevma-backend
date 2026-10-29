@@ -354,6 +354,31 @@ namespace Nevma.Identity.Api.Infrastructure.Persistence.Migrations
                     b.ToTable("blocked_users", "identity");
                 });
 
+            modelBuilder.Entity("Nevma.Identity.Api.Domain.Users.StoryAudienceGroup", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.PrimitiveCollection<Guid[]>("MemberIds")
+                        .IsRequired()
+                        .HasColumnType("uuid[]");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OwnerId");
+
+                    b.ToTable("story_audience_groups", "identity");
+                });
+
             modelBuilder.Entity("Nevma.Identity.Api.Domain.Users.User", b =>
                 {
                     b.Property<Guid>("Id")
@@ -816,6 +841,15 @@ namespace Nevma.Identity.Api.Infrastructure.Persistence.Migrations
                     b.HasOne("Nevma.Identity.Api.Domain.Users.User", null)
                         .WithMany()
                         .HasForeignKey("BlockerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Nevma.Identity.Api.Domain.Users.StoryAudienceGroup", b =>
+                {
+                    b.HasOne("Nevma.Identity.Api.Domain.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

@@ -15,6 +15,7 @@ public sealed class IdentityDbContext(DbContextOptions<IdentityDbContext> option
     : IdentityDbContext<IdentityAccount, IdentityRole<Guid>, Guid>(options), IIdentityUnitOfWork
 {
     public DbSet<User> Profiles => Set<User>();
+    public DbSet<StoryAudienceGroup> StoryAudienceGroups => Set<StoryAudienceGroup>();
     public DbSet<ContactConnection> ContactConnections => Set<ContactConnection>();
     public DbSet<AddressBookContact> AddressBookContacts => Set<AddressBookContact>();
     public DbSet<UserSettings> UserSettings => Set<UserSettings>();
