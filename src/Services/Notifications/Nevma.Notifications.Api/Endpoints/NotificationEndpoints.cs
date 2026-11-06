@@ -1,5 +1,7 @@
 using Nevma.Contracts.Notifications;
 using Nevma.Notifications.Api.Application.Notifications;
+using Microsoft.EntityFrameworkCore;
+using Nevma.Notifications.Api.Infrastructure.Persistence;
 
 namespace Nevma.Notifications.Api.Endpoints;
 
@@ -8,6 +10,28 @@ public static class NotificationEndpoints
     public static IEndpointRouteBuilder MapNotificationEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var notifications = endpoints.MapGroup("/api/notifications").WithTags("Notifications");
+        notifications.MapPost("/internal/contact-joined", async (ContactJoinedRequest request, HttpContext context,
+            IConfiguration configuration, NotificationsDbContext db, NotificationService service, CancellationToken cancellationToken) =>
+        {
+            var expected = configuration["InternalServices:Key"];
+            if (string.IsNullOrWhiteSpace(expected) || context.Request.Headers["X-Nevma-Internal-Key"] != expected)
+                return Results.Unauthorized();
+            if (request.OwnerId == Guid.Empty || request.JoinedUserId == Guid.Empty ||
+                string.IsNullOrWhiteSpace(request.DisplayName) || request.DisplayName.Length > 150)
+                return Results.BadRequest();
+            await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+            {
+                await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+                var lockKey = BitConverter.ToInt64(request.OwnerId.ToByteArray());
+                await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({lockKey})", cancellationToken);
+                if (!await db.Notifications.AnyAsync(item => item.UserId == request.OwnerId &&
+                    item.Type == "contact.joined" && item.ResourceId == request.JoinedUserId, cancellationToken))
+                    await service.CreatePushAsync(request.OwnerId, "contact.joined", "Νέα επαφή στο Nevma",
+                        $"{request.DisplayName} είναι πλέον στο Nevma. Μπορείτε να συνομιλήσετε!", request.JoinedUserId, cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+            });
+            return Results.Accepted();
+        }).AllowAnonymous();
 
         notifications.MapPost("/internal/chat", async (ChatPushRequest request, HttpContext context,
             IConfiguration configuration, NotificationService service, CancellationToken cancellationToken) =>
@@ -29,6 +53,16 @@ public static class NotificationEndpoints
             if (!TryGetUserId(context, out var userId))
                 return Results.Unauthorized();
             return Results.Ok(await service.ListAsync(userId, take ?? 50, cancellationToken));
+        });
+
+        notifications.MapPost("/read-all", async (HttpContext context,
+            NotificationsDbContext db, TimeProvider clock, CancellationToken cancellationToken) =>
+        {
+            if (!TryGetUserId(context, out var userId)) return Results.Unauthorized();
+            var readAt = clock.GetUtcNow();
+            await db.Notifications.Where(item => item.UserId == userId && item.ReadAt == null)
+                .ExecuteUpdateAsync(update => update.SetProperty(item => item.ReadAt, readAt), cancellationToken);
+            return Results.Ok(new { readAt });
         });
 
         notifications.MapPost("/{id:guid}/read", async (
@@ -83,3 +117,4 @@ public static class NotificationEndpoints
 }
 
 public sealed record ChatPushRequest(Guid UserId, Guid ConversationId, string SenderName);
+public sealed record ContactJoinedRequest(Guid OwnerId, Guid JoinedUserId, string DisplayName);

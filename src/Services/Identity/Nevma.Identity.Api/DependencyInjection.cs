@@ -58,6 +58,14 @@ public static class DependencyInjection
         services.AddScoped<ISecurityEventRepository, EfSecurityEventRepository>();
         services.AddScoped<SecurityEventService>();
         services.AddHostedService<OpenIddictSeeder>();
+        services.AddHttpClient("ContactNotifications", client =>
+        {
+            client.BaseAddress = new Uri(configuration["InternalServices:NotificationsUrl"] ?? "http://localhost:5095");
+            client.Timeout = TimeSpan.FromSeconds(15);
+            var key = configuration["InternalServices:Key"] ?? (environment.IsDevelopment() ? "nevma-local-internal" : null);
+            if (!string.IsNullOrWhiteSpace(key)) client.DefaultRequestHeaders.Add("X-Nevma-Internal-Key", key);
+        });
+        services.AddHostedService<ContactJoinedDelivery>();
         return services;
     }
 }

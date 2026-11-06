@@ -59,6 +59,24 @@ public sealed class RegistrationService(
                 false, false, "Available", "Contacts");
             await dbContext.Profiles.AddAsync(profile, cancellationToken);
             await dbContext.SaveChangesAsync(cancellationToken);
+            var contacts = await dbContext.AddressBookContacts.Where(contact => contact.LinkedUserId == null)
+                .ToListAsync(cancellationToken);
+            var resolver = new Nevma.Identity.Api.Infrastructure.AddressBook.EfAddressBookRepository(dbContext);
+            var notifiedOwners = new HashSet<Guid>();
+            foreach (var contact in contacts)
+            {
+                var linked = await resolver.ResolveLinkedUserIdAsync(contact.OwnerId, contact.Phone, contact.Email, cancellationToken);
+                if (linked != account.Id) continue;
+                contact.Update(contact.Name, contact.Phone, contact.Email, contact.Social, contact.Address,
+                    contact.Notes, account.Id, timeProvider.GetUtcNow());
+                if (notifiedOwners.Add(contact.OwnerId))
+                    dbContext.ContactJoinedNotices.Add(new()
+                    {
+                        Id = Guid.NewGuid(), OwnerId = contact.OwnerId, JoinedUserId = account.Id,
+                        DisplayName = contact.Name, CreatedAt = timeProvider.GetUtcNow()
+                    });
+            }
+            await dbContext.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
 
             return RegistrationResult.Success(

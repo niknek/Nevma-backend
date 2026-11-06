@@ -14,6 +14,32 @@ namespace Nevma.Identity.Tests;
 public sealed class RegistrationServiceTests
 {
     [Fact]
+    public async Task Registration_links_matching_contacts_and_queues_one_notice_per_owner()
+    {
+        await using var testServices = await CreateServicesAsync();
+        await using var scope = testServices.Provider.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
+        var owner = Guid.NewGuid();
+        var otherOwner = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        db.AddressBookContacts.AddRange(
+            Nevma.Identity.Api.Domain.AddressBook.AddressBookContact.Create(owner, "Friend", "+306912345678", null, null, null, null, null, now),
+            Nevma.Identity.Api.Domain.AddressBook.AddressBookContact.Create(owner, "Email friend", "6900000000", "friend@example.com", null, null, null, null, now),
+            Nevma.Identity.Api.Domain.AddressBook.AddressBookContact.Create(otherOwner, "Friend", "00306912345678", null, null, null, null, null, now),
+            Nevma.Identity.Api.Domain.AddressBook.AddressBookContact.Create(otherOwner, "Unrelated", "6999999999", null, null, null, null, null, now));
+        await db.SaveChangesAsync();
+        var service = scope.ServiceProvider.GetRequiredService<IRegistrationService>();
+        var request = new RegisterUserRequest("friend@example.com", "Strong!Password123", "Friend", null, "6912345678");
+        var result = await service.RegisterAsync(request);
+        Assert.True(result.IsSuccess);
+        Assert.Equal(3, await db.AddressBookContacts.CountAsync(contact => contact.LinkedUserId == result.User!.Id));
+        Assert.Equal(2, await db.ContactJoinedNotices.CountAsync());
+        Assert.All(await db.ContactJoinedNotices.ToListAsync(), notice => Assert.Null(notice.DeliveredAt));
+        Assert.False((await service.RegisterAsync(request)).IsSuccess);
+        Assert.Equal(2, await db.ContactJoinedNotices.CountAsync());
+    }
+
+    [Fact]
     public async Task Registration_creates_one_account_and_profile()
     {
         await using var testServices = await CreateServicesAsync();

@@ -15,6 +15,7 @@ public sealed class IdentityDbContext(DbContextOptions<IdentityDbContext> option
     : IdentityDbContext<IdentityAccount, IdentityRole<Guid>, Guid>(options), IIdentityUnitOfWork
 {
     public DbSet<User> Profiles => Set<User>();
+    public DbSet<Nevma.Identity.Api.Infrastructure.AddressBook.ContactJoinedNotice> ContactJoinedNotices => Set<Nevma.Identity.Api.Infrastructure.AddressBook.ContactJoinedNotice>();
     public DbSet<StoryAudienceGroup> StoryAudienceGroups => Set<StoryAudienceGroup>();
     public DbSet<ContactConnection> ContactConnections => Set<ContactConnection>();
     public DbSet<AddressBookContact> AddressBookContacts => Set<AddressBookContact>();
@@ -27,6 +28,13 @@ public sealed class IdentityDbContext(DbContextOptions<IdentityDbContext> option
     protected override void OnModelCreating(ModelBuilder builder)
     {
         builder.HasDefaultSchema("identity");
+        builder.Entity<Nevma.Identity.Api.Infrastructure.AddressBook.ContactJoinedNotice>(entity =>
+        {
+            entity.ToTable("contact_joined_notices");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.DisplayName).HasMaxLength(150);
+            entity.HasIndex(item => new { item.OwnerId, item.JoinedUserId }).IsUnique();
+        });
         base.OnModelCreating(builder);
         builder.UseOpenIddict();
         builder.ApplyConfigurationsFromAssembly(typeof(IdentityDbContext).Assembly);

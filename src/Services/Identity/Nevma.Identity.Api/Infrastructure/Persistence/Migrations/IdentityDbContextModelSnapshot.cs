@@ -491,6 +491,37 @@ namespace Nevma.Identity.Api.Infrastructure.Persistence.Migrations
                     b.ToTable("user_settings", "identity");
                 });
 
+            modelBuilder.Entity("Nevma.Identity.Api.Infrastructure.AddressBook.ContactJoinedNotice", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("DeliveredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<Guid>("JoinedUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OwnerId", "JoinedUserId")
+                        .IsUnique();
+
+                    b.ToTable("contact_joined_notices", "identity");
+                });
+
             modelBuilder.Entity("Nevma.Identity.Api.Infrastructure.Persistence.IdentityAccount", b =>
                 {
                     b.Property<Guid>("Id")
