@@ -18,6 +18,8 @@ public sealed class RegistrationService(
     {
         if (string.IsNullOrWhiteSpace(request.DisplayName))
             return RegistrationResult.Failure(nameof(request.DisplayName), "Display name is required.");
+        if (string.IsNullOrWhiteSpace(request.Phone))
+            return RegistrationResult.Failure(nameof(request.Phone), "Phone is required.");
         string? normalizedPhone = null;
         if (!string.IsNullOrWhiteSpace(request.Phone))
         {

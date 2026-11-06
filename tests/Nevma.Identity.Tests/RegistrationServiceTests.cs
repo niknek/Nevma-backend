@@ -13,6 +13,27 @@ namespace Nevma.Identity.Tests;
 
 public sealed class RegistrationServiceTests
 {
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("123")]
+    [InlineData("1234567890123456")]
+    public async Task Invalid_phone_does_not_create_account_profile_or_notice(string? phone)
+    {
+        await using var testServices = await CreateServicesAsync();
+        await using var scope = testServices.Provider.CreateAsyncScope();
+        var service = scope.ServiceProvider.GetRequiredService<IRegistrationService>();
+        var result = await service.RegisterAsync(new RegisterUserRequest(
+            "missing-phone@example.com", "Strong!Password123", "Test", null, phone));
+        Assert.False(result.IsSuccess);
+        Assert.Contains("Phone", result.Errors.Keys);
+        var db = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
+        Assert.Equal(0, await db.Users.CountAsync());
+        Assert.Equal(0, await db.Profiles.CountAsync());
+        Assert.Equal(0, await db.ContactJoinedNotices.CountAsync());
+    }
+
     [Fact]
     public async Task Registration_links_matching_contacts_and_queues_one_notice_per_owner()
     {
@@ -50,7 +71,7 @@ public sealed class RegistrationServiceTests
             "nikos@example.com",
             "Strong!Password123",
             "Nikos",
-            null));
+            null, "6912345678"));
 
         var dbContext = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
         Assert.True(result.IsSuccess);
@@ -71,7 +92,7 @@ public sealed class RegistrationServiceTests
             "nikos@example.com",
             "Strong!Password123",
             "Nikos",
-            null);
+            null, "6912345678");
 
         var first = await service.RegisterAsync(request);
         var duplicate = await service.RegisterAsync(request with { DisplayName = "Other" });

@@ -17,6 +17,20 @@ namespace Nevma.Identity.Tests;
 public sealed class IdentityApiTests
 {
     [Fact]
+    public async Task Registration_without_phone_returns_bad_request()
+    {
+        using var factory = new IdentityApiFactory();
+        using var client = CreateClient(factory);
+        await factory.InitializeDatabaseAsync();
+        var response = await client.PostAsJsonAsync("/api/auth/register", new
+        {
+            email = "missing-phone@example.com", password = "Strong!Password123", displayName = "Test"
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("Phone is required", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
     public async Task Register_creates_an_account_but_me_requires_a_token()
     {
         using var factory = new IdentityApiFactory();
@@ -27,7 +41,7 @@ public sealed class IdentityApiTests
             "maria@example.com",
             "Strong!Password123",
             "Maria",
-            null));
+            null, "6912345678"));
         var me = await client.GetAsync("/api/users/me");
 
         Assert.Equal(HttpStatusCode.Created, register.StatusCode);
@@ -44,7 +58,7 @@ public sealed class IdentityApiTests
             "profile-menu@example.com",
             "Strong!Password123",
             "Nektarios",
-            null));
+            null, "6912345678"));
         using (var scope = factory.Services.CreateScope())
         {
             var users = scope.ServiceProvider.GetRequiredService<UserManager<IdentityAccount>>();
@@ -117,7 +131,7 @@ public sealed class IdentityApiTests
             "external-session@example.com",
             "Strong!Password123",
             "External Session",
-            null));
+            null, "6912345678"));
         var registeredUser = await registration.Content.ReadFromJsonAsync<UserSummary>();
         Assert.NotNull(registeredUser);
         var expectedUserId = registeredUser.Id;
